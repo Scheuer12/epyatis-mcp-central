@@ -1,0 +1,42 @@
+# Bootstrap Declarative Configuration for Epyatis MCP Central
+instances:
+  - id: "horst-suite"
+    name: "Horst Operational Suite"
+    slug: "horst-suite"
+    description: "Endpoint agregador de operações com Google Drive e Periskope WhatsApp para a Horst Group."
+    tokens:
+      - token: "epy_dev_token_123"
+        label: "Paperclip Local Dev Connector"
+    data_sources_map:
+      organization: "Horst Group"
+      sources:
+        - name: "Google Drive (@horstgroup.net)"
+          system: "google_drive"
+          content_types: ["planilhas_financeiras", "cronogramas", "documentos_internos", "propostas"]
+          primary_tools: ["gdrive__search_files", "gdrive__read_file", "gdrive__create_file"]
+          guidance: "Consulte o Google Drive para qualquer documento oficial, planilhas operacionais e arquivos arquivados da Horst Group."
+        - name: "Periskope WhatsApp"
+          system: "periskope"
+          content_types: ["mensagens_whatsapp", "grupos_clientes", "atendimentos", "notificacoes"]
+          primary_tools: ["periskope__list_chats", "periskope__send_message", "periskope__get_chat_history"]
+          guidance: "Consulte o Periskope para acompanhar comunicações ativas com clientes, mensagens em grupos de WhatsApp e histórico de atendimentos."
+    connections:
+      - id: "internal"
+        enabled: true
+        prefix: "central"
+      - id: "gdrive"
+        enabled: true
+        type: "stdio"
+        prefix: "gdrive"
+        command: "npx"
+        args: ["-y", "@us-all/google-drive-mcp"]
+        env:
+          GOOGLE_DRIVE_ALLOW_WRITE: "true"
+          DOTENV_CONFIG_QUIET: "true"
+          DOTENVX_LOG: "error"
+      - id: "periskope"
+        enabled: true
+        type: "stdio"
+        prefix: "periskope"
+        command: "npx"
+        args: ["-y", "@periskope/whatsapp-mcp"]
