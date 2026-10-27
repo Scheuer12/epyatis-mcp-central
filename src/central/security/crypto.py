@@ -7,6 +7,7 @@ import base64
 import hashlib
 import json
 import logging
+import secrets
 from typing import Any
 from cryptography.fernet import Fernet
 from central.config import settings
@@ -75,3 +76,21 @@ def decrypt_json_dict(stored_value: str | None) -> dict[str, Any]:
     except Exception as e:
         logger.warning(f"Falha ao desserializar JSON descriptografado: {e}")
         return {}
+
+
+def hash_password(password: str) -> str:
+    """Gera hash PBKDF2-HMAC-SHA256 com salt aleatório para armazenamento seguro de senhas."""
+    if not password:
+        return ""
+    salt = secrets.token_hex(16)
+    key = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 100_000)
+    return f"{salt}${key.hex()}"
+
+
+def verify_password(password: str, hashed: str | None) -> bool:
+    """Verifica se a senha em texto plano corresponde ao hash armazenado."""
+    if not password or not hashed or "$" not in hashed:
+        return False
+    salt, key_hex = hashed.split("$", 1)
+    test_key = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 100_000)
+    return secrets.compare_digest(test_key.hex(), key_hex)

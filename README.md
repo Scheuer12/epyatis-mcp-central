@@ -322,15 +322,19 @@ Create sandboxed filesystem connections with strict directory containment:
 
 ## Multi-User Governance & RBAC Scoping
 
-Epyatis MCP Central provides comprehensive user isolation and session management:
+Epyatis MCP Central provides comprehensive user isolation, session management, and granular access control (ACL):
 
 - **User Roles:**
-  - `epy_root`: Master Administrator. Holds elevated privileges to configure global settings, inspect audit logs across all instances, and publish shared assets to `public` visibility.
-  - Standard User: Can create private connections, custom templates, and instances.
-- **Visibility Levels:**
+  - `epy_root`: Master Administrator. Holds elevated privileges to configure global settings, generate one-time onboarding invites, approve/reject access requests, inspect audit logs across all instances, and publish shared assets to `public` visibility.
+  - Standard User: Can create private connections, custom templates, and instances, as well as share assets with specific colleagues.
+- **Controlled User Onboarding & Registration:**
+  - **Single-Use Invite Links:** Master Admins generate time-limited (e.g. 24h, 48h, 7d) single-use invite links or codes. Users registering with a valid invite are instantly activated.
+  - **Approval Queue:** Users registering without an invite enter a `pending_approval` state and cannot log in until explicitly approved by the Master Admin via the Governance console.
+  - **Secure Password Hashing:** Credential storage utilizes PBKDF2-HMAC-SHA256 with 100,000 iterations and cryptographic salting.
+- **Granular Visibility Levels (ACL):**
   - `private`: Accessible only to the creator user.
-  - `shared`: Accessible to all authenticated users in the organization.
-  - `public`: Accessible publicly across instances. **Strict Enforcement:** Only a Master Admin (`epy_root`) can set any asset to `public`. Any attempt by standard users to publish an asset as `public` returns `403 Forbidden`.
+  - `shared`: Accessible only to the creator and explicitly selected users via granular share assignment. When setting visibility to shared, the Studio prompts the user to select which colleagues have access.
+  - `public`: Accessible to all authenticated users across the organization. **Strict Governance:** Only a Master Admin (`epy_root`) can set any asset to `public`. Any attempt by standard users to publish an asset as `public` returns `403 Forbidden`.
 
 ---
 
@@ -347,9 +351,20 @@ Epyatis MCP Central provides comprehensive user isolation and session management
 
 | Method | Endpoint | Description | Auth Required |
 | :--- | :--- | :--- | :--- |
-| `POST` | `/api/v1/auth/login` | Authenticate with username or admin key | None |
+| `POST` | `/api/v1/auth/login` | Authenticate with username and password or admin key | None |
+| `POST` | `/api/v1/auth/register` | Register new user account (with invite or pending approval) | None |
 | `POST` | `/api/v1/auth/switch-user` | Switch active session to another user profile | None (Local Dev) |
 | `GET` | `/api/v1/auth/me` | Retrieve profile and role of active session user | Session / Admin |
+| `POST` | `/api/v1/admin/invites` | Generate single-use, time-limited onboarding invite link | Master Admin |
+| `GET` | `/api/v1/admin/invites` | List active and historical onboarding invites | Master Admin |
+| `DELETE` | `/api/v1/admin/invites/{code}` | Revoke an unused onboarding invite | Master Admin |
+| `GET` | `/api/v1/admin/pending-users` | List user registrations pending admin approval | Master Admin |
+| `POST` | `/api/v1/admin/pending-users/{id}/approve` | Approve a pending user account for immediate access | Master Admin |
+| `POST` | `/api/v1/admin/pending-users/{id}/reject` | Reject a pending registration request | Master Admin |
+| `GET` | `/api/v1/connections/{id}/shares` | List user IDs with access to this shared connection | Session / Admin |
+| `PUT` | `/api/v1/connections/{id}/shares` | Configure granular user access list for a connection | Owner / Admin |
+| `GET` | `/api/v1/instances/{slug}/shares` | List user IDs with access to this shared instance | Session / Admin |
+| `PUT` | `/api/v1/instances/{slug}/shares` | Configure granular user access list for an instance | Owner / Admin |
 | `GET` | `/api/v1/overview` | Retrieve system telemetry, tool counts, and success rate | Admin Key |
 | `GET` | `/api/v1/connections` | List connections visible to the authenticated user | Session / Admin |
 | `POST` | `/api/v1/connections` | Register a new upstream connection with visibility scoping | Session / Admin |

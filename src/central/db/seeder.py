@@ -49,6 +49,12 @@ def _migrate_columns() -> None:
             if "display_name" not in cols:
                 conn.exec_driver_sql("ALTER TABLE users ADD COLUMN display_name VARCHAR(128)")
                 conn.commit()
+            if "password_hash" not in cols:
+                conn.exec_driver_sql("ALTER TABLE users ADD COLUMN password_hash VARCHAR(256)")
+                conn.commit()
+            if "status" not in cols:
+                conn.exec_driver_sql("ALTER TABLE users ADD COLUMN status VARCHAR(32) DEFAULT 'approved'")
+                conn.commit()
     except Exception as e:
         logger.warning(f"Aviso durante verificação de migrações: {e}")
 

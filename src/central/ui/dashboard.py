@@ -84,7 +84,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     </div>
                 </div>
             </div>
-            <button @click="showUserModal = true" class="text-slate-400 hover:text-blue-400 text-xs p-1.5 rounded-lg hover:bg-slate-800 transition-colors" title="Trocar Usuário ou Gerenciar Sessão">
+            <button @click="showAuthModal = true; authTab = 'switch'" class="text-slate-400 hover:text-blue-400 text-xs p-1.5 rounded-lg hover:bg-slate-800 transition-colors" title="Trocar Usuário ou Gerenciar Sessão">
                 <i class="fa-solid fa-arrow-right-arrow-left"></i>
             </button>
         </div>
@@ -273,6 +273,15 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                                                         <button @click="setInstanceVisibility(currentInstanceDetail.slug, 'public'); openVis = false" class="w-full text-left px-3 py-1.5 hover:bg-slate-700 text-amber-300 flex items-center gap-2"><i class="fa-solid fa-crown text-amber-400"></i> Público (Root)</button>
                                                     </div>
                                                 </div>
+                                                <!-- Botão de Configuração de Compartilhamento -->
+                                                <template x-if="currentInstanceDetail.visibility === 'shared'">
+                                                    <button @click="openShareModal(currentInstanceDetail, 'instance')" 
+                                                            class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-blue-500/20 text-blue-300 border border-blue-500/40 hover:bg-blue-500/30 flex items-center gap-1.5 transition-colors cursor-pointer"
+                                                            title="Gerenciar usuários com acesso a esta instância">
+                                                        <i class="fa-solid fa-user-plus text-[9px]"></i>
+                                                        <span x-text="(currentInstanceDetail.shared_user_ids || []).length > 0 ? (currentInstanceDetail.shared_user_ids.length + ' autorizados') : 'Escolher usuários'"></span>
+                                                    </button>
+                                                </template>
                                             </div>
                                             <p class="text-xs text-slate-400 mt-1" x-text="currentInstanceDetail.description || 'Instância operacional MCP agregadora de ferramentas.'"></p>
                                         </div>
@@ -593,6 +602,16 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                                             </div>
                                         </div>
                                     </div>
+                                    <!-- Botão de Configuração de Usuários Compartilhados -->
+                                    <template x-if="c.visibility === 'shared'">
+                                        <div class="mt-2">
+                                            <button @click="openShareModal(c, 'connection')" 
+                                                    class="text-[10px] text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1.5 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
+                                                <i class="fa-solid fa-user-plus text-[9px]"></i>
+                                                <span x-text="(c.shared_user_ids || []).length > 0 ? (c.shared_user_ids.length + ' usuários autorizados') : 'Escolher usuários'"></span>
+                                            </button>
+                                        </div>
+                                    </template>
 
                                     <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
                                         <span class="font-mono text-[11px]" x-text="'prefix: ' + (c.prefix || c.id) + '__*'"></span>
@@ -702,7 +721,14 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             <div x-show="activeTab === 'governance'" class="space-y-6">
                 <div class="flex items-center gap-4 text-xs font-semibold border-b border-slate-200 pb-3">
                     <button @click="govSubTab = 'users'" :class="govSubTab === 'users' ? 'text-blue-600 border-b-2 border-blue-600 pb-3' : 'text-slate-500 hover:text-slate-800 pb-3'">
-                        <i class="fa-solid fa-users mr-1"></i> Usuários & Sessões (<span x-text="usersList.length"></span>)
+                        <i class="fa-solid fa-users mr-1"></i> Usuários (<span x-text="usersList.length"></span>)
+                    </button>
+                    <button @click="govSubTab = 'pending'" :class="govSubTab === 'pending' ? 'text-blue-600 border-b-2 border-blue-600 pb-3' : 'text-slate-500 hover:text-slate-800 pb-3'" class="flex items-center gap-1.5">
+                        <i class="fa-solid fa-user-clock mr-1"></i> Aprovações Pendentes
+                        <span x-show="pendingUsers.length > 0" class="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-white" x-text="pendingUsers.length"></span>
+                    </button>
+                    <button @click="govSubTab = 'invites'" :class="govSubTab === 'invites' ? 'text-blue-600 border-b-2 border-blue-600 pb-3' : 'text-slate-500 hover:text-slate-800 pb-3'">
+                        <i class="fa-solid fa-ticket mr-1"></i> Convites de Acesso (<span x-text="invitesList.filter(i => !i.is_used).length"></span>)
                     </button>
                     <button @click="govSubTab = 'logs'" :class="govSubTab === 'logs' ? 'text-blue-600 border-b-2 border-blue-600 pb-3' : 'text-slate-500 hover:text-slate-800 pb-3'">
                         <i class="fa-solid fa-list-ul mr-1"></i> Logs de Auditoria Globais
@@ -750,6 +776,128 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                                                 Alternar para este Usuário
                                             </button>
                                         </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Sub-Aba: Solicitações de Cadastro Pendentes -->
+                <div x-show="govSubTab === 'pending'" class="space-y-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Fila de Aprovação de Novos Usuários</span>
+                            <p class="text-xs text-slate-400 mt-0.5">Cadastros realizados sem convite necessitam da aprovação do Master Admin.</p>
+                        </div>
+                        <button @click="fetchPendingUsers()" class="text-xs text-blue-600 hover:underline flex items-center gap-1">
+                            <i class="fa-solid fa-rotate text-[10px]"></i> Atualizar Fila
+                        </button>
+                    </div>
+
+                    <div class="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+                        <table class="w-full text-left text-xs text-slate-600">
+                            <thead class="bg-slate-50 border-b border-slate-200 text-slate-700 font-semibold uppercase text-[10px]">
+                                <tr>
+                                    <th class="p-3.5">Usuário Solicitante</th>
+                                    <th class="p-3.5">Nome de Exibição</th>
+                                    <th class="p-3.5">Data da Solicitação</th>
+                                    <th class="p-3.5 text-right">Decisão</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100">
+                                <template x-for="p in pendingUsers" :key="p.id">
+                                    <tr class="hover:bg-slate-50">
+                                        <td class="p-3.5 font-mono font-bold text-slate-800" x-text="'@' + p.username"></td>
+                                        <td class="p-3.5 text-slate-700" x-text="p.display_name || '-'"></td>
+                                        <td class="p-3.5 text-slate-400 font-mono text-[11px]" x-text="formatDate(p.created_at)"></td>
+                                        <td class="p-3.5 text-right space-x-2">
+                                            <button @click="approveUser(p.id)" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-xs">
+                                                <i class="fa-solid fa-check text-[10px] mr-1"></i> Aprovar
+                                            </button>
+                                            <button @click="rejectUser(p.id)" class="px-3 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-semibold">
+                                                <i class="fa-solid fa-xmark text-[10px] mr-1"></i> Rejeitar
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </template>
+                                <template x-if="pendingUsers.length === 0">
+                                    <tr>
+                                        <td colspan="4" class="p-8 text-center text-slate-400 text-xs">
+                                            <i class="fa-solid fa-circle-check text-emerald-500 text-xl block mb-2"></i>
+                                            Nenhuma solicitação de acesso pendente no momento.
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Sub-Aba: Convites de Acesso Temporário (Uso Único) -->
+                <div x-show="govSubTab === 'invites'" class="space-y-4">
+                    <div class="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200">
+                        <div>
+                            <span class="text-xs font-bold uppercase tracking-wider text-slate-700 block">Gerador de Convites de Uso Único</span>
+                            <p class="text-xs text-slate-400">Usuários que se cadastram via link/código de convite são ativados instantaneamente.</p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <select x-model="inviteHours" class="text-xs border border-slate-300 rounded-lg px-2.5 py-1.5 bg-white text-slate-700">
+                                <option value="12">Válido por 12 horas</option>
+                                <option value="24">Válido por 24 horas</option>
+                                <option value="48">Válido por 48 horas</option>
+                                <option value="168">Válido por 7 dias</option>
+                            </select>
+                            <button @click="generateInvite()" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-xs">
+                                <i class="fa-solid fa-plus text-[10px]"></i> Gerar Convite
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+                        <table class="w-full text-left text-xs text-slate-600">
+                            <thead class="bg-slate-50 border-b border-slate-200 text-slate-700 font-semibold uppercase text-[10px]">
+                                <tr>
+                                    <th class="p-3.5">Código do Convite</th>
+                                    <th class="p-3.5">Expira em</th>
+                                    <th class="p-3.5">Status</th>
+                                    <th class="p-3.5">Utilizado Por</th>
+                                    <th class="p-3.5 text-right">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100">
+                                <template x-for="inv in invitesList" :key="inv.id">
+                                    <tr class="hover:bg-slate-50">
+                                        <td class="p-3.5 font-mono font-bold text-slate-800">
+                                            <span class="bg-slate-100 px-2 py-1 rounded text-blue-700 select-all" x-text="inv.code"></span>
+                                        </td>
+                                        <td class="p-3.5 font-mono text-[11px] text-slate-500" x-text="formatDate(inv.expires_at)"></td>
+                                        <td class="p-3.5">
+                                            <template x-if="inv.is_used">
+                                                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">Utilizado</span>
+                                            </template>
+                                            <template x-if="!inv.is_used">
+                                                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">Disponível</span>
+                                            </template>
+                                        </td>
+                                        <td class="p-3.5 font-mono text-slate-600" x-text="inv.used_by ? ('@' + inv.used_by) : '-'"></td>
+                                        <td class="p-3.5 text-right space-x-2">
+                                            <template x-if="!inv.is_used">
+                                                <button @click="copyText(window.location.origin + '/?invite=' + inv.code, 'Link de cadastro copiado!')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-xs font-semibold">
+                                                    <i class="fa-regular fa-copy text-[10px] mr-1"></i> Copiar Link
+                                                </button>
+                                            </template>
+                                            <template x-if="!inv.is_used">
+                                                <button @click="deleteInvite(inv.code)" class="p-1 text-slate-400 hover:text-rose-600 text-xs" title="Revogar Convite">
+                                                    <i class="fa-solid fa-trash-can"></i>
+                                                </button>
+                                            </template>
+                                        </td>
+                                    </tr>
+                                </template>
+                                <template x-if="invitesList.length === 0">
+                                    <tr>
+                                        <td colspan="5" class="p-8 text-center text-slate-400 text-xs">Nenhum convite gerado recentemente.</td>
                                     </tr>
                                 </template>
                             </tbody>
@@ -1056,22 +1204,168 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         </div>
     </div>
 
-    <!-- Modal 8: Autenticação Administrativa Inicial -->
-    <div x-show="showAuthModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-xs p-4">
-        <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 text-center space-y-4">
-            <div class="w-12 h-12 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mx-auto text-xl">
-                <i class="fa-solid fa-shield-halved"></i>
+    <!-- Modal: Compartilhamento Granular de Recursos -->
+    <div x-show="showShareModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4" @click.self="showShareModal = false">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+                <div>
+                    <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+                        <i class="fa-solid fa-user-group text-blue-600"></i> Compartilhar <span x-text="shareTargetType === 'connection' ? 'Conexão' : 'Instância'"></span>
+                    </h3>
+                    <p class="text-xs text-slate-500 font-medium" x-text="shareTargetName"></p>
+                </div>
+                <button @click="showShareModal = false" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
             </div>
-            <div>
-                <h3 class="text-base font-bold text-slate-800">Autenticação Administrativa</h3>
-                <p class="text-xs text-slate-500 mt-1">Informe sua chave mestra administrativa para conectar ao Central.</p>
+
+            <div class="space-y-3">
+                <p class="text-xs text-slate-500">Selecione quais usuários terão permissão de acesso a este recurso quando a visibilidade for definida como <span class="font-bold text-blue-600">Compartilhado</span>.</p>
+                
+                <input type="text" x-model="shareSearchQuery" placeholder="Buscar usuário por nome..." class="w-full text-xs border border-slate-300 rounded-lg p-2.5">
+
+                <div class="max-h-60 overflow-y-auto space-y-1.5 border border-slate-100 rounded-xl p-2 bg-slate-50/50">
+                    <template x-for="u in filteredShareUsers" :key="u.id">
+                        <label class="flex items-center justify-between p-2.5 rounded-lg hover:bg-white cursor-pointer border border-transparent hover:border-slate-200 transition-all">
+                            <div class="flex items-center gap-3">
+                                <input type="checkbox" :value="u.id" x-model="shareSelectedUserIds" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+                                <div>
+                                    <span class="text-xs font-bold text-slate-800 block" x-text="u.display_name || u.username"></span>
+                                    <span class="text-[11px] text-slate-400 font-mono" x-text="'@' + u.username"></span>
+                                </div>
+                            </div>
+                            <span class="text-[10px] px-2 py-0.5 rounded-full font-semibold"
+                                  :class="u.role === 'epy_root' ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-600'"
+                                  x-text="u.role === 'epy_root' ? 'Master Admin' : 'Padrão'"></span>
+                        </label>
+                    </template>
+                </div>
             </div>
-            <div>
-                <input type="password" x-model="authKeyInput" placeholder="Chave de Admin..." class="w-full text-xs border border-slate-300 rounded-lg p-2.5 text-center font-mono">
+
+            <div class="flex items-center justify-between pt-3 border-t border-slate-100">
+                <span class="text-xs text-slate-400 font-medium"><span x-text="shareSelectedUserIds.length"></span> selecionado(s)</span>
+                <div class="flex items-center gap-2">
+                    <button @click="showShareModal = false" class="px-4 py-2 text-xs text-slate-600 hover:bg-slate-100 rounded-lg">Cancelar</button>
+                    <button @click="saveShares()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-xs">Salvar Compartilhamento</button>
+                </div>
             </div>
-            <button @click="saveAdminKey()" class="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors">
-                Acessar Central
-            </button>
+        </div>
+    </div>
+
+    <!-- Modal 8: Autenticação, Login & Cadastro Integrado -->
+    <div x-show="showAuthModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-xs p-4" @click.self="if (currentUser.username) showAuthModal = false">
+        <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+                <div class="flex items-center gap-2">
+                    <div class="w-7 h-7 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">
+                        <i class="fa-solid fa-shield-halved"></i>
+                    </div>
+                    <h3 class="text-sm font-bold text-slate-800">Autenticação & Contas</h3>
+                </div>
+                <template x-if="currentUser.username">
+                    <button @click="showAuthModal = false" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+                </template>
+            </div>
+
+            <!-- Abas do Modal de Auth -->
+            <div class="flex items-center rounded-xl bg-slate-100 p-1 text-xs font-semibold">
+                <button @click="authTab = 'login'" :class="authTab === 'login' ? 'bg-white text-slate-800 shadow-xs' : 'text-slate-500 hover:text-slate-800'" class="flex-1 py-1.5 rounded-lg transition-all text-center">
+                    Entrar
+                </button>
+                <button @click="authTab = 'register'" :class="authTab === 'register' ? 'bg-white text-slate-800 shadow-xs' : 'text-slate-500 hover:text-slate-800'" class="flex-1 py-1.5 rounded-lg transition-all text-center">
+                    Criar Conta
+                </button>
+                <button @click="authTab = 'switch'" :class="authTab === 'switch' ? 'bg-white text-slate-800 shadow-xs' : 'text-slate-500 hover:text-slate-800'" class="flex-1 py-1.5 rounded-lg transition-all text-center">
+                    Alternar
+                </button>
+            </div>
+
+            <!-- Aba 1: Entrar (Login) -->
+            <div x-show="authTab === 'login'" class="space-y-3">
+                <template x-if="!useAdminKeyLogin">
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-600 mb-1">Nome de Usuário</label>
+                            <input type="text" x-model="loginForm.username" placeholder="Seu usuário..." class="w-full text-xs border border-slate-300 rounded-lg p-2.5 font-mono">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-600 mb-1">Senha</label>
+                            <input type="password" x-model="loginForm.password" placeholder="Sua senha..." class="w-full text-xs border border-slate-300 rounded-lg p-2.5 font-mono" @keyup.enter="submitLogin()">
+                        </div>
+                        <button @click="submitLogin()" class="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors">
+                            Entrar no Sistema
+                        </button>
+                    </div>
+                </template>
+
+                <template x-if="useAdminKeyLogin">
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-600 mb-1">Chave Mestra Admin (Master Key)</label>
+                            <input type="password" x-model="authKeyInput" placeholder="Chave de Admin..." class="w-full text-xs border border-slate-300 rounded-lg p-2.5 text-center font-mono" @keyup.enter="saveAdminKey()">
+                        </div>
+                        <button @click="saveAdminKey()" class="w-full py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors">
+                            Acessar como Master Admin
+                        </button>
+                    </div>
+                </template>
+
+                <div class="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
+                    <button @click="useAdminKeyLogin = !useAdminKeyLogin" class="text-blue-600 hover:underline">
+                        <span x-text="useAdminKeyLogin ? '← Entrar com Usuário e Senha' : '🔑 Entrar com Chave Mestra'"></span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Aba 2: Criar Nova Conta -->
+            <div x-show="authTab === 'register'" class="space-y-3 text-left">
+                <div>
+                    <label class="block text-xs font-medium text-slate-600 mb-1">Nome de Usuário *</label>
+                    <input type="text" x-model="registerForm.username" placeholder="Ex: analista_ops" class="w-full text-xs border border-slate-300 rounded-lg p-2 font-mono">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-600 mb-1">Nome de Exibição</label>
+                    <input type="text" x-model="registerForm.display_name" placeholder="Ex: João Silva" class="w-full text-xs border border-slate-300 rounded-lg p-2">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-600 mb-1">Senha (Mínimo 6 caracteres) *</label>
+                    <input type="password" x-model="registerForm.password" placeholder="Senha segura..." class="w-full text-xs border border-slate-300 rounded-lg p-2 font-mono">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-600 mb-1">Código de Convite (Opcional)</label>
+                    <input type="text" x-model="registerForm.invite_code" placeholder="Código fornecido pelo Admin..." class="w-full text-xs border border-slate-300 rounded-lg p-2 font-mono bg-amber-50/50">
+                    <p class="text-[10px] text-slate-400 mt-1">
+                        💡 Com convite: liberação imediata. Sem convite: aguarda aprovação do Master Admin.
+                    </p>
+                </div>
+                <button @click="submitRegister()" class="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors">
+                    Solicitar Cadastro
+                </button>
+            </div>
+
+            <!-- Aba 3: Alternar Usuário Rápido (Dev) -->
+            <div x-show="authTab === 'switch'" class="space-y-2 max-h-60 overflow-y-auto">
+                <template x-for="u in usersList" :key="u.id">
+                    <div @click="switchUserAccount(u.username); showAuthModal = false" 
+                         :class="currentUser.username === u.username ? 'bg-blue-50 border-blue-300' : 'hover:bg-slate-50 border-slate-200'"
+                         class="p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all">
+                        <div>
+                            <span class="text-xs font-bold text-slate-800" x-text="u.display_name || u.username"></span>
+                            <span class="text-[11px] text-slate-400 block font-mono" x-text="'@' + u.username"></span>
+                        </div>
+                        <template x-if="u.role === 'epy_root'">
+                            <span class="text-amber-500 text-xs font-bold" title="Master Admin"><i class="fa-solid fa-crown"></i></span>
+                        </template>
+                    </div>
+                </template>
+            </div>
+
+            <template x-if="currentUser.username">
+                <div class="pt-2 border-t border-slate-100 flex items-center justify-between">
+                    <span class="text-xs text-slate-400">Logado como: <strong class="text-slate-700 font-mono" x-text="'@' + currentUser.username"></strong></span>
+                    <button @click="logout()" class="text-xs text-rose-600 hover:text-rose-800 font-semibold flex items-center gap-1">
+                        <i class="fa-solid fa-arrow-right-from-bracket text-[10px]"></i> Sair
+                    </button>
+                </div>
+            </template>
         </div>
     </div>
 
@@ -1096,6 +1390,19 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 showSaveAsKitModal: false,
                 showConfirmModal: false,
                 showInstantiateModal: false,
+                showShareModal: false,
+                shareTargetType: 'connection',
+                shareTargetId: '',
+                shareTargetName: '',
+                shareSelectedUserIds: [],
+                shareSearchQuery: '',
+                authTab: 'login',
+                useAdminKeyLogin: false,
+                loginForm: { username: '', password: '' },
+                registerForm: { username: '', display_name: '', password: '', invite_code: '' },
+                pendingUsers: [],
+                invitesList: [],
+                inviteHours: '24',
                 authKeyInput: '',
                 currentUser: { username: '', role: 'standard', display_name: '', is_master_admin: false },
                 usersList: [],
@@ -1188,6 +1495,14 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     const attachedIds = (this.currentInstanceDetail.connections || []).map(c => c.id);
                     return this.connections.filter(c => !attachedIds.includes(c.id));
                 },
+                get filteredShareUsers() {
+                    if (!this.shareSearchQuery) return this.usersList;
+                    const q = this.shareSearchQuery.toLowerCase();
+                    return this.usersList.filter(u => 
+                        (u.username || '').toLowerCase().includes(q) || 
+                        (u.display_name || '').toLowerCase().includes(q)
+                    );
+                },
 
                 getConnectionIcon(id, type) {
                     if (id.includes('gdrive') || id.includes('drive')) return 'fa-google-drive';
@@ -1226,18 +1541,24 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
                 async initApp() {
                     const params = new URLSearchParams(window.location.search);
+                    const qInvite = params.get('invite');
+                    if (qInvite) {
+                        this.authTab = 'register';
+                        this.registerForm.invite_code = qInvite.trim();
+                        this.showAuthModal = true;
+                    }
                     const qKey = params.get('admin_key');
                     if (qKey) {
                         this.adminKey = qKey.trim();
                         localStorage.setItem('central_admin_key', this.adminKey);
                     }
-                    if (!this.adminKey && !this.sessionToken) {
+                    if (!this.adminKey && !this.sessionToken && !qInvite) {
                         this.showAuthModal = true;
                         return;
                     }
                     await this.fetchMe();
                     await this.refreshAll();
-                    if (this.instances.length > 0) {
+                    if (this.instances.length > 0 && !this.selectedInstanceSlug) {
                         this.selectInstance(this.instances[0].slug);
                     }
                 },
@@ -1254,7 +1575,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 async refreshAll() {
                     this.loading = true;
                     try {
-                        await Promise.all([
+                        const tasks = [
                             this.fetchOverview(),
                             this.fetchInstances(),
                             this.fetchConnections(),
@@ -1262,7 +1583,12 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                             this.fetchDataSourceKits(),
                             this.fetchUsers(),
                             this.fetchRecentLogs()
-                        ]);
+                        ];
+                        if (this.currentUser && this.currentUser.role === 'epy_root') {
+                            tasks.push(this.fetchInvites());
+                            tasks.push(this.fetchPendingUsers());
+                        }
+                        await Promise.all(tasks);
                         if (this.selectedInstanceSlug) {
                             await this.selectInstance(this.selectedInstanceSlug);
                         }
@@ -1399,6 +1725,9 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                             const inst = this.instances.find(i => i.slug === slug);
                             if (inst) inst.visibility = newVis;
                             this.showToast(`Visibilidade alterada para ${newVis}.`, 'success');
+                            if (newVis === 'shared') {
+                                this.openShareModal(this.currentInstanceDetail || inst, 'instance');
+                            }
                         } else {
                             const err = await res.json();
                             this.showToast(err.detail || 'Falha ao alterar visibilidade.', 'error');
@@ -1423,6 +1752,9 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                             const c = this.connections.find(item => item.id === connId);
                             if (c) c.visibility = newVis;
                             this.showToast(`Visibilidade da conexão alterada para ${newVis}.`, 'success');
+                            if (newVis === 'shared' && c) {
+                                this.openShareModal(c, 'connection');
+                            }
                         } else {
                             const err = await res.json();
                             this.showToast(err.detail || 'Falha ao alterar visibilidade.', 'error');
@@ -1430,6 +1762,207 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     } catch (e) {
                         this.showToast('Erro na requisição.', 'error');
                     }
+                },
+
+                openShareModal(item, type) {
+                    this.shareTargetType = type;
+                    this.shareTargetId = (type === 'connection' ? item.id : item.slug);
+                    this.shareTargetName = item.name;
+                    this.shareSelectedUserIds = [...(item.shared_user_ids || [])];
+                    this.shareSearchQuery = '';
+                    this.showShareModal = true;
+                },
+
+                async saveShares() {
+                    try {
+                        const url = this.shareTargetType === 'connection' 
+                            ? `/api/v1/connections/${this.shareTargetId}/shares`
+                            : `/api/v1/instances/${this.shareTargetId}/shares`;
+                        const res = await this.apiFetch(url, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ user_ids: this.shareSelectedUserIds })
+                        });
+                        if (res && res.ok) {
+                            const data = await res.json();
+                            if (this.shareTargetType === 'connection') {
+                                const c = this.connections.find(i => i.id === this.shareTargetId);
+                                if (c) c.shared_user_ids = data.shared_user_ids;
+                            } else {
+                                if (this.currentInstanceDetail && this.currentInstanceDetail.slug === this.shareTargetId) {
+                                    this.currentInstanceDetail.shared_user_ids = data.shared_user_ids;
+                                }
+                                const inst = this.instances.find(i => i.slug === this.shareTargetId);
+                                if (inst) inst.shared_user_ids = data.shared_user_ids;
+                            }
+                            this.showShareModal = false;
+                            this.showToast('Compartilhamento de acesso salvo com sucesso!', 'success');
+                        } else {
+                            const err = await res.json();
+                            this.showToast(err.detail || 'Erro ao salvar compartilhamento.', 'error');
+                        }
+                    } catch (e) {
+                        this.showToast('Erro na requisição de compartilhamento.', 'error');
+                    }
+                },
+
+                async fetchPendingUsers() {
+                    if (this.currentUser.role !== 'epy_root') return;
+                    try {
+                        const res = await this.apiFetch('/api/v1/admin/pending-users');
+                        if (res && res.ok) {
+                            this.pendingUsers = await res.json();
+                        }
+                    } catch (e) {}
+                },
+
+                async fetchInvites() {
+                    if (this.currentUser.role !== 'epy_root') return;
+                    try {
+                        const res = await this.apiFetch('/api/v1/admin/invites');
+                        if (res && res.ok) {
+                            this.invitesList = await res.json();
+                        }
+                    } catch (e) {}
+                },
+
+                async generateInvite() {
+                    try {
+                        const res = await this.apiFetch('/api/v1/admin/invites', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ expires_hours: parseInt(this.inviteHours) || 24, role: 'standard' })
+                        });
+                        if (res && res.ok) {
+                            const data = await res.json();
+                            this.showToast('Novo convite gerado com sucesso!', 'success');
+                            await this.fetchInvites();
+                        } else {
+                            const err = await res.json();
+                            this.showToast(err.detail || 'Erro ao gerar convite.', 'error');
+                        }
+                    } catch (e) {
+                        this.showToast('Falha na comunicação.', 'error');
+                    }
+                },
+
+                async deleteInvite(code) {
+                    if (!confirm('Deseja realmente revogar este convite?')) return;
+                    try {
+                        const res = await this.apiFetch(`/api/v1/admin/invites/${code}`, { method: 'DELETE' });
+                        if (res && res.ok) {
+                            this.showToast('Convite revogado com sucesso.', 'info');
+                            await this.fetchInvites();
+                        }
+                    } catch (e) {
+                        this.showToast('Erro ao revogar convite.', 'error');
+                    }
+                },
+
+                async approveUser(userId) {
+                    try {
+                        const res = await this.apiFetch(`/api/v1/admin/pending-users/${userId}/approve`, { method: 'POST' });
+                        if (res && res.ok) {
+                            this.showToast('Usuário aprovado com sucesso!', 'success');
+                            await Promise.all([this.fetchPendingUsers(), this.fetchUsers()]);
+                        } else {
+                            const err = await res.json();
+                            this.showToast(err.detail || 'Erro ao aprovar usuário.', 'error');
+                        }
+                    } catch (e) {
+                        this.showToast('Falha ao aprovar usuário.', 'error');
+                    }
+                },
+
+                async rejectUser(userId) {
+                    if (!confirm('Deseja realmente rejeitar esta solicitação?')) return;
+                    try {
+                        const res = await this.apiFetch(`/api/v1/admin/pending-users/${userId}/reject`, { method: 'POST' });
+                        if (res && res.ok) {
+                            this.showToast('Solicitação de usuário rejeitada.', 'info');
+                            await this.fetchPendingUsers();
+                        } else {
+                            const err = await res.json();
+                            this.showToast(err.detail || 'Erro ao rejeitar usuário.', 'error');
+                        }
+                    } catch (e) {
+                        this.showToast('Falha ao rejeitar usuário.', 'error');
+                    }
+                },
+
+                async submitLogin() {
+                    if (!this.loginForm.username) {
+                        this.showToast('Informe o nome de usuário.', 'error');
+                        return;
+                    }
+                    try {
+                        const res = await fetch('/api/v1/auth/login', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(this.loginForm)
+                        });
+                        if (res && res.ok) {
+                            const data = await res.json();
+                            this.sessionToken = data.token;
+                            localStorage.setItem('central_session_token', data.token);
+                            this.showAuthModal = false;
+                            this.showToast(`Bem-vindo, ${data.user.display_name || data.user.username}!`, 'success');
+                            await this.fetchMe();
+                            await this.refreshAll();
+                        } else {
+                            const err = await res.json();
+                            this.showToast(err.detail || 'Falha ao autenticar.', 'error');
+                        }
+                    } catch (e) {
+                        this.showToast('Erro de comunicação.', 'error');
+                    }
+                },
+
+                async submitRegister() {
+                    if (!this.registerForm.username || !this.registerForm.password) {
+                        this.showToast('Preencha o usuário e a senha.', 'error');
+                        return;
+                    }
+                    try {
+                        const res = await fetch('/api/v1/auth/register', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(this.registerForm)
+                        });
+                        const data = await res.json();
+                        if (res && res.ok) {
+                            if (data.status === 'approved' && data.token) {
+                                this.sessionToken = data.token;
+                                localStorage.setItem('central_session_token', data.token);
+                                this.showAuthModal = false;
+                                this.showToast('Conta ativada com sucesso pelo convite!', 'success');
+                                await this.fetchMe();
+                                await this.refreshAll();
+                            } else {
+                                this.showToast(data.message || 'Cadastro realizado! Aguardando aprovação.', 'info');
+                                this.authTab = 'login';
+                            }
+                            this.registerForm = { username: '', display_name: '', password: '', invite_code: '' };
+                        } else {
+                            this.showToast(data.detail || 'Erro ao realizar cadastro.', 'error');
+                        }
+                    } catch (e) {
+                        this.showToast('Erro ao enviar solicitação.', 'error');
+                    }
+                },
+
+                async logout() {
+                    try {
+                        await this.apiFetch('/api/v1/auth/logout', { method: 'POST' });
+                    } catch (e) {}
+                    localStorage.removeItem('central_session_token');
+                    localStorage.removeItem('central_admin_key');
+                    this.sessionToken = '';
+                    this.adminKey = '';
+                    this.currentUser = { username: '', role: 'standard', display_name: '', is_master_admin: false };
+                    this.showAuthModal = true;
+                    this.authTab = 'login';
+                    this.showToast('Sessão encerrada.', 'info');
                 },
 
                 async attachConnection(slug) {

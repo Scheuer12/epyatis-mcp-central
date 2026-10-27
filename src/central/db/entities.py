@@ -36,12 +36,16 @@ class UserEntity(Base):
     display_name = Column(String(128), nullable=True)
     role = Column(String(32), default="standard", nullable=False)  # epy_root | standard
     password_hash = Column(String(256), nullable=True)
+    status = Column(String(32), default="approved", nullable=False)  # approved | pending_approval | rejected
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=utc_now, nullable=False)
 
     connections = relationship("ConnectionEntity", back_populates="user", cascade="all, delete-orphan")
     instances = relationship("InstanceEntity", back_populates="user", cascade="all, delete-orphan")
     sessions = relationship("UserSessionEntity", back_populates="user", cascade="all, delete-orphan")
+    connection_shares = relationship("ConnectionShareEntity", back_populates="user", cascade="all, delete-orphan")
+    instance_shares = relationship("InstanceShareEntity", back_populates="user", cascade="all, delete-orphan")
+    invites_created = relationship("UserInviteEntity", foreign_keys="UserInviteEntity.created_by_user_id", back_populates="created_by")
 
 
 class UserSessionEntity(Base):
@@ -78,6 +82,7 @@ class ConnectionEntity(Base):
     user = relationship("UserEntity", back_populates="connections")
     tools = relationship("ToolEntity", back_populates="connection", cascade="all, delete-orphan")
     instance_associations = relationship("InstanceConnectionEntity", back_populates="connection", cascade="all, delete-orphan")
+    shares = relationship("ConnectionShareEntity", back_populates="connection", cascade="all, delete-orphan")
 
     @property
     def args(self) -> list[str]:
@@ -158,6 +163,7 @@ class InstanceEntity(Base):
     tokens = relationship("InstanceTokenEntity", back_populates="instance", cascade="all, delete-orphan")
     connection_associations = relationship("InstanceConnectionEntity", back_populates="instance", cascade="all, delete-orphan")
     tool_associations = relationship("InstanceToolEntity", back_populates="instance", cascade="all, delete-orphan")
+    shares = relationship("InstanceShareEntity", back_populates="instance", cascade="all, delete-orphan")
 
     @property
     def data_sources_map(self) -> dict[str, Any] | None:
@@ -299,3 +305,44 @@ class DataSourceKitEntity(Base):
     @sources.setter
     def sources(self, val: list[dict[str, Any]]) -> None:
         self.sources_json = json.dumps(val or [], ensure_ascii=False)
+
+
+class ConnectionShareEntity(Base):
+    __tablename__ = "connection_shares"
+
+    id = Column(String(64), primary_key=True, default=generate_uuid)
+    connection_id = Column(String(64), ForeignKey("connections.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(String(64), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+
+    connection = relationship("ConnectionEntity", back_populates="shares")
+    user = relationship("UserEntity", back_populates="connection_shares")
+
+
+class InstanceShareEntity(Base):
+    __tablename__ = "instance_shares"
+
+    id = Column(String(64), primary_key=True, default=generate_uuid)
+    instance_id = Column(String(64), ForeignKey("instances.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(String(64), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+
+    instance = relationship("InstanceEntity", back_populates="shares")
+    user = relationship("UserEntity", back_populates="instance_shares")
+
+
+class UserInviteEntity(Base):
+    __tablename__ = "user_invites"
+
+    id = Column(String(64), primary_key=True, default=generate_uuid)
+    code = Column(String(64), unique=True, nullable=False, index=True)
+    created_by_user_id = Column(String(64), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    role = Column(String(32), default="standard", nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    is_used = Column(Boolean, default=False, nullable=False)
+    used_by_user_id = Column(String(64), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+
+    created_by = relationship("UserEntity", foreign_keys=[created_by_user_id], back_populates="invites_created")
+    used_by = relationship("UserEntity", foreign_keys=[used_by_user_id])
+

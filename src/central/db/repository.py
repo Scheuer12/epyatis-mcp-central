@@ -13,14 +13,17 @@ from sqlalchemy.orm import Session
 from central.db.entities import (
     AuditLogEntity,
     ConnectionEntity,
+    ConnectionShareEntity,
     ConnectionTemplateEntity,
     DataSourceKitEntity,
     InstanceConnectionEntity,
     InstanceEntity,
+    InstanceShareEntity,
     InstanceTokenEntity,
     InstanceToolEntity,
     ToolEntity,
     UserEntity,
+    UserInviteEntity,
     UserSessionEntity,
 )
 from central.models import (
@@ -53,11 +56,14 @@ class CentralRepository:
             query = query.filter(InstanceEntity.visibility == visibility)
 
         if current_user and current_user.role != "epy_root":
+            shared_instance_ids = db.query(InstanceShareEntity.instance_id).filter(
+                InstanceShareEntity.user_id == current_user.id
+            )
             query = query.filter(
                 or_(
                     InstanceEntity.visibility == "public",
-                    InstanceEntity.visibility == "shared",
-                    (InstanceEntity.visibility == "private") & (InstanceEntity.user_id == current_user.id),
+                    InstanceEntity.user_id == current_user.id,
+                    (InstanceEntity.visibility == "shared") & InstanceEntity.id.in_(shared_instance_ids),
                 )
             )
 
@@ -170,6 +176,34 @@ class CentralRepository:
         return connection
 
     @staticmethod
+    def get_connection_shared_user_ids(db: Session, connection_id: str) -> list[str]:
+        rows = db.query(ConnectionShareEntity.user_id).filter(ConnectionShareEntity.connection_id == connection_id).all()
+        return [r[0] for r in rows]
+
+    @staticmethod
+    def set_connection_shares(db: Session, connection_id: str, user_ids: list[str]) -> list[str]:
+        db.query(ConnectionShareEntity).filter(ConnectionShareEntity.connection_id == connection_id).delete()
+        for uid in set(user_ids):
+            if uid:
+                db.add(ConnectionShareEntity(connection_id=connection_id, user_id=uid))
+        db.commit()
+        return list(set(user_ids))
+
+    @staticmethod
+    def get_instance_shared_user_ids(db: Session, instance_id: str) -> list[str]:
+        rows = db.query(InstanceShareEntity.user_id).filter(InstanceShareEntity.instance_id == instance_id).all()
+        return [r[0] for r in rows]
+
+    @staticmethod
+    def set_instance_shares(db: Session, instance_id: str, user_ids: list[str]) -> list[str]:
+        db.query(InstanceShareEntity).filter(InstanceShareEntity.instance_id == instance_id).delete()
+        for uid in set(user_ids):
+            if uid:
+                db.add(InstanceShareEntity(instance_id=instance_id, user_id=uid))
+        db.commit()
+        return list(set(user_ids))
+
+    @staticmethod
     def delete_connection(db: Session, connection: ConnectionEntity) -> None:
         db.query(ToolEntity).filter(ToolEntity.connection_id == connection.id).delete()
         db.query(InstanceConnectionEntity).filter(InstanceConnectionEntity.connection_id == connection.id).delete()
@@ -191,11 +225,14 @@ class CentralRepository:
             query = query.filter(ConnectionEntity.visibility == visibility)
 
         if current_user and current_user.role != "epy_root":
+            shared_conn_ids = db.query(ConnectionShareEntity.connection_id).filter(
+                ConnectionShareEntity.user_id == current_user.id
+            )
             query = query.filter(
                 or_(
                     ConnectionEntity.visibility == "public",
-                    ConnectionEntity.visibility == "shared",
-                    (ConnectionEntity.visibility == "private") & (ConnectionEntity.user_id == current_user.id),
+                    ConnectionEntity.user_id == current_user.id,
+                    (ConnectionEntity.visibility == "shared") & ConnectionEntity.id.in_(shared_conn_ids),
                 )
             )
 
@@ -509,17 +546,141 @@ class CentralRepository:
         role: str = "standard",
         display_name: str | None = None,
         password_hash: str | None = None,
+        status: str = "approved",
     ) -> UserEntity:
+        is_active = (status == "approved")
         user = UserEntity(
             username=username,
             role=role,
             display_name=display_name or username,
             password_hash=password_hash,
-            is_active=True,
+            status=status,
+            is_active=is_active,
         )
         db.add(user)
         db.commit()
         db.refresh(user)
+        return user
+
+    @staticmethod
+    def create_user_with_password(
+        db: Session,
+        username: str,
+        password: str,
+        role: str = "standard",
+        display_name: str | None = None,
+        status: str = "approved",
+    ) -> UserEntity:
+        from central.security.crypto import hash_password
+        p_hash = hash_password(password) if password else None
+        return CentralRepository.create_user(
+            db=db,
+            username=username,
+            role=role,
+            display_name=display_name,
+            password_hash=p_hash,
+            status=status,
+        )
+
+    @staticmethod
+    def authenticate_user(
+        db: Session,
+        username: str,
+        password: str,
+    ) -> tuple[UserEntity | None, str | None]:
+        from central.security.crypto import verify_password
+        from central.config import settings
+
+        user = db.query(UserEntity).filter(UserEntity.username == username).first()
+        if not user:
+            return None, "Usuário ou senha incorretos."
+
+        if user.username == "epy_root" and not user.password_hash and settings.CENTRAL_ADMIN_KEY:
+            if secrets.compare_digest(password, settings.CENTRAL_ADMIN_KEY):
+                return user, None
+
+        if not user.password_hash:
+            return None, "Conta sem senha configurada. Utilize a chave administrativa."
+
+        if not verify_password(password, user.password_hash):
+            return None, "Usuário ou senha incorretos."
+
+        if getattr(user, "status", "approved") == "pending_approval":
+            return None, "Sua conta está aguardando aprovação pelo Master Admin."
+
+        if getattr(user, "status", "approved") == "rejected":
+            return None, "Sua solicitação de acesso foi rejeitada pelo administrador."
+
+        if not user.is_active:
+            return None, "Conta desativada."
+
+        return user, None
+
+    @staticmethod
+    def create_invite(
+        db: Session,
+        created_by_user_id: str | None,
+        expires_hours: int = 24,
+        role: str = "standard",
+    ) -> UserInviteEntity:
+        from datetime import timedelta
+        code = secrets.token_urlsafe(16)
+        expires_at = datetime.now(timezone.utc) + timedelta(hours=expires_hours)
+        invite = UserInviteEntity(
+            code=code,
+            created_by_user_id=created_by_user_id,
+            role=role,
+            expires_at=expires_at,
+            is_used=False,
+        )
+        db.add(invite)
+        db.commit()
+        db.refresh(invite)
+        return invite
+
+    @staticmethod
+    def get_invite_by_code(db: Session, code: str) -> UserInviteEntity | None:
+        return db.query(UserInviteEntity).filter(UserInviteEntity.code == code).first()
+
+    @staticmethod
+    def get_all_invites(db: Session, active_only: bool = False) -> list[UserInviteEntity]:
+        q = db.query(UserInviteEntity)
+        if active_only:
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
+            q = q.filter(UserInviteEntity.is_used == False, UserInviteEntity.expires_at > now)
+        return q.order_by(UserInviteEntity.created_at.desc()).all()
+
+    @staticmethod
+    def delete_invite(db: Session, code: str) -> bool:
+        inv = db.query(UserInviteEntity).filter(UserInviteEntity.code == code).first()
+        if inv:
+            db.delete(inv)
+            db.commit()
+            return True
+        return False
+
+    @staticmethod
+    def get_pending_users(db: Session) -> list[UserEntity]:
+        return db.query(UserEntity).filter(UserEntity.status == "pending_approval").order_by(UserEntity.created_at.desc()).all()
+
+    @staticmethod
+    def approve_user(db: Session, user_id: str) -> UserEntity | None:
+        user = db.query(UserEntity).filter(UserEntity.id == user_id).first()
+        if user:
+            user.status = "approved"
+            user.is_active = True
+            db.commit()
+            db.refresh(user)
+        return user
+
+    @staticmethod
+    def reject_user(db: Session, user_id: str) -> UserEntity | None:
+        user = db.query(UserEntity).filter(UserEntity.id == user_id).first()
+        if user:
+            user.status = "rejected"
+            user.is_active = False
+            db.commit()
+            db.refresh(user)
         return user
 
     @staticmethod

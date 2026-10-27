@@ -61,7 +61,7 @@ def get_current_user(
         session = db.query(UserSessionEntity).filter(
             UserSessionEntity.token == session_token.strip()
         ).first()
-        if session and session.user and session.user.is_active:
+        if session and session.user and session.user.is_active and getattr(session.user, "status", "approved") == "approved":
             return session.user
 
     client_ip = request.client.host if request.client else "desconhecido"

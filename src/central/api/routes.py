@@ -57,6 +57,22 @@ class LoginRequest(BaseModel):
     admin_key: str | None = None
 
 
+class RegisterRequest(BaseModel):
+    username: str
+    password: str
+    display_name: str | None = None
+    invite_code: str | None = None
+
+
+class CreateInviteRequest(BaseModel):
+    expires_hours: int = 24
+    role: str = "standard"
+
+
+class ShareUsersRequest(BaseModel):
+    user_ids: list[str] = Field(default_factory=list)
+
+
 class SwitchUserRequest(BaseModel):
     username: str
 
@@ -162,7 +178,7 @@ class TokenCreateRequest(BaseModel):
 
 @auth_router.post("/login")
 def login(data: LoginRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
-    """Cria uma sessão para o usuário ou valida via Chave Mestra."""
+    """Cria uma sessão para o usuário ou valida via Chave Mestra ou Senha."""
     from central.config import settings
     if data.admin_key and settings.CENTRAL_ADMIN_KEY and secrets.compare_digest(data.admin_key, settings.CENTRAL_ADMIN_KEY):
         user = CentralRepository.get_user_by_username(db, "epy_root")
@@ -180,9 +196,36 @@ def login(data: LoginRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
             }
         }
 
+    # Se forneceu senha, autentica estritamente
+    if data.password:
+        user, err_msg = CentralRepository.authenticate_user(db, data.username, data.password)
+        if not user:
+            status_code = 403 if (err_msg and ("aguardando aprovação" in err_msg or "rejeitada" in err_msg)) else 401
+            raise HTTPException(status_code=status_code, detail=err_msg or "Credenciais inválidas.")
+
+        session_token = f"sess_{secrets.token_hex(24)}"
+        CentralRepository.create_session(db, user.id, session_token)
+        return {
+            "token": session_token,
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "role": user.role,
+                "display_name": user.display_name or user.username,
+            }
+        }
+
+    # Fallback para logins programáticos de teste ou contas legadas sem senha
     user = CentralRepository.get_user_by_username(db, data.username)
     if not user:
         raise HTTPException(status_code=401, detail="Usuário não encontrado.")
+
+    if getattr(user, "status", "approved") == "pending_approval":
+        raise HTTPException(status_code=403, detail="Sua conta está aguardando aprovação pelo Master Admin.")
+    if getattr(user, "status", "approved") == "rejected":
+        raise HTTPException(status_code=403, detail="Sua solicitação de acesso foi rejeitada pelo administrador.")
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="Conta desativada.")
 
     session_token = f"sess_{secrets.token_hex(24)}"
     CentralRepository.create_session(db, user.id, session_token)
@@ -194,6 +237,78 @@ def login(data: LoginRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
             "role": user.role,
             "display_name": user.display_name or user.username,
         }
+    }
+
+
+@auth_router.post("/register")
+def register(data: RegisterRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Criação de novos usuários com convite (ativação instantânea) ou aprovação pelo Master Admin."""
+    existing = CentralRepository.get_user_by_username(db, data.username.strip())
+    if existing:
+        raise HTTPException(status_code=400, detail="Este nome de usuário já está cadastrado.")
+
+    if not data.password or len(data.password.strip()) < 6:
+        raise HTTPException(status_code=400, detail="A senha deve ter no mínimo 6 caracteres.")
+
+    # Caso 1: Cadastro com código de convite válido gerado pelo Master Admin
+    if data.invite_code and data.invite_code.strip():
+        code_clean = data.invite_code.strip()
+        invite = CentralRepository.get_invite_by_code(db, code_clean)
+        now = datetime.now(timezone.utc)
+        if not invite:
+            raise HTTPException(status_code=400, detail="Código de convite inválido ou inexistente.")
+        if invite.is_used:
+            raise HTTPException(status_code=400, detail="Este convite de uso único já foi utilizado.")
+        expires_at = invite.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if expires_at < now:
+            raise HTTPException(status_code=400, detail="Este código de convite expirou.")
+
+        user = CentralRepository.create_user_with_password(
+            db=db,
+            username=data.username.strip(),
+            password=data.password,
+            role=invite.role,
+            display_name=data.display_name or data.username.strip(),
+            status="approved",
+        )
+        invite.is_used = True
+        invite.used_by_user_id = user.id
+        db.commit()
+
+        session_token = f"sess_{secrets.token_hex(24)}"
+        CentralRepository.create_session(db, user.id, session_token)
+        return {
+            "status": "approved",
+            "message": "Conta criada e ativada com sucesso pelo convite!",
+            "token": session_token,
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "role": user.role,
+                "display_name": user.display_name or user.username,
+            },
+        }
+
+    # Caso 2: Cadastro sem convite -> requer aprovação do Master Admin
+    user = CentralRepository.create_user_with_password(
+        db=db,
+        username=data.username.strip(),
+        password=data.password,
+        role="standard",
+        display_name=data.display_name or data.username.strip(),
+        status="pending_approval",
+    )
+    return {
+        "status": "pending_approval",
+        "message": "Conta cadastrada com sucesso! Sua solicitação de acesso está aguardando aprovação pelo Master Admin.",
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "role": user.role,
+            "display_name": user.display_name or user.username,
+        },
     }
 
 
@@ -287,6 +402,115 @@ def create_new_user(
     }
 
 
+# --- Gestão de Convites e Aprovações (Restrito ao Master Admin) ---
+
+@api_router.post("/admin/invites")
+def create_invite_endpoint(
+    data: CreateInviteRequest,
+    db: Session = Depends(get_db),
+    current_user: UserEntity = Depends(require_master_admin),
+) -> dict[str, Any]:
+    """Gera um convite de uso único com expiração programada (Master Admin)."""
+    invite = CentralRepository.create_invite(
+        db=db,
+        created_by_user_id=current_user.id,
+        expires_hours=data.expires_hours,
+        role=data.role,
+    )
+    return {
+        "status": "success",
+        "invite": {
+            "id": invite.id,
+            "code": invite.code,
+            "role": invite.role,
+            "expires_at": invite.expires_at.isoformat(),
+            "is_used": invite.is_used,
+        },
+    }
+
+
+@api_router.get("/admin/invites")
+def list_invites_endpoint(
+    active_only: bool = Query(False),
+    db: Session = Depends(get_db),
+    current_user: UserEntity = Depends(require_master_admin),
+) -> list[dict[str, Any]]:
+    """Lista todos os convites gerados e seus status de uso (Master Admin)."""
+    invites = CentralRepository.get_all_invites(db, active_only=active_only)
+    return [
+        {
+            "id": inv.id,
+            "code": inv.code,
+            "role": inv.role,
+            "created_by": inv.created_by.username if inv.created_by else None,
+            "expires_at": inv.expires_at.isoformat(),
+            "is_used": inv.is_used,
+            "used_by": inv.used_by.username if inv.used_by else None,
+            "created_at": inv.created_at.isoformat(),
+        }
+        for inv in invites
+    ]
+
+
+@api_router.delete("/admin/invites/{code}")
+def delete_invite_endpoint(
+    code: str,
+    db: Session = Depends(get_db),
+    current_user: UserEntity = Depends(require_master_admin),
+) -> dict[str, Any]:
+    """Revoga um convite gerado (Master Admin)."""
+    deleted = CentralRepository.delete_invite(db, code)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Convite não encontrado.")
+    return {"status": "success", "message": "Convite revogado com sucesso."}
+
+
+@api_router.get("/admin/pending-users")
+def list_pending_users_endpoint(
+    db: Session = Depends(get_db),
+    current_user: UserEntity = Depends(require_master_admin),
+) -> list[dict[str, Any]]:
+    """Lista usuários que solicitaram cadastro e aguardam aprovação (Master Admin)."""
+    pending = CentralRepository.get_pending_users(db)
+    return [
+        {
+            "id": u.id,
+            "username": u.username,
+            "display_name": u.display_name or u.username,
+            "role": u.role,
+            "status": getattr(u, "status", "pending_approval"),
+            "created_at": u.created_at.isoformat() if u.created_at else None,
+        }
+        for u in pending
+    ]
+
+
+@api_router.post("/admin/pending-users/{user_id}/approve")
+def approve_pending_user_endpoint(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_user: UserEntity = Depends(require_master_admin),
+) -> dict[str, Any]:
+    """Aprova o cadastro de um novo usuário (Master Admin)."""
+    user = CentralRepository.approve_user(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+    return {"status": "success", "message": f"Usuário '{user.username}' aprovado com sucesso."}
+
+
+@api_router.post("/admin/pending-users/{user_id}/reject")
+def reject_pending_user_endpoint(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_user: UserEntity = Depends(require_master_admin),
+) -> dict[str, Any]:
+    """Rejeita a solicitação de cadastro (Master Admin)."""
+    user = CentralRepository.reject_user(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+    return {"status": "success", "message": f"Usuário '{user.username}' rejeitado."}
+
+
 @api_router.get("/overview")
 def get_overview(db: Session = Depends(get_db)) -> dict[str, Any]:
     """Retorna métricas gerais e status do sistema."""
@@ -337,6 +561,7 @@ def list_connections(
             "env_keys": list(c.env.keys()),
             "url": c.url,
             "visibility": getattr(c, "visibility", "shared"),
+            "shared_user_ids": [s.user_id for s in c.shares],
             "is_active": c.is_active,
             "health_status": c.health_status,
             "tools_count": tool_count,
@@ -671,6 +896,7 @@ def list_instances(
             "slug": inst.slug,
             "description": inst.description,
             "visibility": getattr(inst, "visibility", "shared"),
+            "shared_user_ids": [s.user_id for s in inst.shares],
             "is_active": inst.is_active,
             "connections": conns,
             "tokens": tokens,
@@ -734,6 +960,10 @@ def get_instance_detail(
     if current_user.role != "epy_root":
         if inst.visibility == "private" and inst.user_id != current_user.id:
             raise HTTPException(status_code=403, detail="Acesso restrito ao proprietário da instância.")
+        if inst.visibility == "shared" and inst.user_id != current_user.id:
+            shared_uids = CentralRepository.get_instance_shared_user_ids(db, inst.id)
+            if current_user.id not in shared_uids:
+                raise HTTPException(status_code=403, detail="Acesso não compartilhado com este usuário.")
 
     conns = [
         {
@@ -767,6 +997,7 @@ def get_instance_detail(
         "connections": conns,
         "tokens": tokens,
         "sources_map": sources_map,
+        "shared_user_ids": CentralRepository.get_instance_shared_user_ids(db, inst.id),
         "created_at": inst.created_at.isoformat() if inst.created_at else None,
     }
 
@@ -798,6 +1029,45 @@ async def update_instance_metadata(
     )
     await gateway_manager.reload_instance(slug)
     return {"status": "success", "slug": inst.slug, "visibility": inst.visibility}
+
+
+@api_router.get("/instances/{slug}/shares")
+def get_instance_shares_endpoint(
+    slug: str,
+    db: Session = Depends(get_db),
+    current_user: UserEntity = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Retorna os IDs de usuários autorizados nesta instância."""
+    inst = CentralRepository.get_instance_by_slug(db, slug)
+    if not inst:
+        raise HTTPException(status_code=404, detail="Instância não encontrada.")
+    shared_uids = CentralRepository.get_instance_shared_user_ids(db, inst.id)
+    return {
+        "instance_slug": slug,
+        "shared_user_ids": shared_uids,
+    }
+
+
+@api_router.put("/instances/{slug}/shares")
+def update_instance_shares_endpoint(
+    slug: str,
+    data: ShareUsersRequest,
+    db: Session = Depends(get_db),
+    current_user: UserEntity = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Define quais usuários possuem acesso a esta instância compartilhada."""
+    inst = CentralRepository.get_instance_by_slug(db, slug)
+    if not inst:
+        raise HTTPException(status_code=404, detail="Instância não encontrada.")
+    if current_user.role != "epy_root" and inst.user_id and inst.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Apenas o proprietário ou o Master Admin podem gerenciar compartilhamento.")
+
+    saved_uids = CentralRepository.set_instance_shares(db, inst.id, data.user_ids)
+    return {
+        "status": "success",
+        "instance_slug": slug,
+        "shared_user_ids": saved_uids,
+    }
 
 
 @api_router.delete("/instances/{slug}")
@@ -874,6 +1144,45 @@ def update_connection_visibility_endpoint(
 
     CentralRepository.update_connection_visibility(db, conn, data.visibility)
     return {"status": "success", "id": conn.id, "visibility": conn.visibility}
+
+
+@api_router.get("/connections/{conn_id}/shares")
+def get_connection_shares_endpoint(
+    conn_id: str,
+    db: Session = Depends(get_db),
+    current_user: UserEntity = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Retorna a lista de IDs de usuários com acesso concedido a esta conexão."""
+    conn = CentralRepository.get_connection_by_id(db, conn_id)
+    if not conn:
+        raise HTTPException(status_code=404, detail="Conexão não encontrada.")
+    shared_uids = CentralRepository.get_connection_shared_user_ids(db, conn_id)
+    return {
+        "connection_id": conn_id,
+        "shared_user_ids": shared_uids,
+    }
+
+
+@api_router.put("/connections/{conn_id}/shares")
+def update_connection_shares_endpoint(
+    conn_id: str,
+    data: ShareUsersRequest,
+    db: Session = Depends(get_db),
+    current_user: UserEntity = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Define quais usuários possuem acesso a esta conexão compartilhada."""
+    conn = CentralRepository.get_connection_by_id(db, conn_id)
+    if not conn:
+        raise HTTPException(status_code=404, detail="Conexão não encontrada.")
+    if current_user.role != "epy_root" and conn.user_id and conn.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Apenas o proprietário ou o Master Admin podem gerenciar compartilhamento.")
+
+    saved_uids = CentralRepository.set_connection_shares(db, conn_id, data.user_ids)
+    return {
+        "status": "success",
+        "connection_id": conn_id,
+        "shared_user_ids": saved_uids,
+    }
 
 
 @api_router.delete("/connections/{conn_id}")
