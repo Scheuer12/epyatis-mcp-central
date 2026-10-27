@@ -107,6 +107,76 @@ class CentralRepository:
         return instance
 
     @staticmethod
+    def update_instance(
+        db: Session,
+        instance: InstanceEntity,
+        name: str | None = None,
+        description: str | None = None,
+        visibility: str | None = None,
+    ) -> InstanceEntity:
+        if name is not None:
+            instance.name = name
+        if description is not None:
+            instance.description = description
+        if visibility is not None:
+            instance.visibility = visibility
+        db.commit()
+        db.refresh(instance)
+        return instance
+
+    @staticmethod
+    def delete_instance(db: Session, instance: InstanceEntity) -> None:
+        db.query(InstanceTokenEntity).filter(InstanceTokenEntity.instance_id == instance.id).delete()
+        db.query(InstanceConnectionEntity).filter(InstanceConnectionEntity.instance_id == instance.id).delete()
+        db.delete(instance)
+        db.commit()
+
+    @staticmethod
+    def attach_connection_to_instance(db: Session, instance_id: str, connection_id: str) -> InstanceConnectionEntity:
+        assoc = (
+            db.query(InstanceConnectionEntity)
+            .filter(
+                InstanceConnectionEntity.instance_id == instance_id,
+                InstanceConnectionEntity.connection_id == connection_id,
+            )
+            .first()
+        )
+        if not assoc:
+            assoc = InstanceConnectionEntity(
+                instance_id=instance_id,
+                connection_id=connection_id,
+                is_enabled=True,
+            )
+            db.add(assoc)
+        else:
+            assoc.is_enabled = True
+        db.commit()
+        db.refresh(assoc)
+        return assoc
+
+    @staticmethod
+    def detach_connection_from_instance(db: Session, instance_id: str, connection_id: str) -> None:
+        db.query(InstanceConnectionEntity).filter(
+            InstanceConnectionEntity.instance_id == instance_id,
+            InstanceConnectionEntity.connection_id == connection_id,
+        ).delete()
+        db.commit()
+
+    @staticmethod
+    def update_connection_visibility(db: Session, connection: ConnectionEntity, visibility: str) -> ConnectionEntity:
+        connection.visibility = visibility
+        db.commit()
+        db.refresh(connection)
+        return connection
+
+    @staticmethod
+    def delete_connection(db: Session, connection: ConnectionEntity) -> None:
+        db.query(ToolEntity).filter(ToolEntity.connection_id == connection.id).delete()
+        db.query(InstanceConnectionEntity).filter(InstanceConnectionEntity.connection_id == connection.id).delete()
+        db.delete(connection)
+        db.commit()
+
+    @staticmethod
     def get_all_connections(
         db: Session,
         active_only: bool = False,

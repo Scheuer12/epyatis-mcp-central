@@ -114,6 +114,20 @@ class InstanceCreateRequest(BaseModel):
     connection_ids: list[str] = Field(default_factory=list, description="IDs das conexões associadas")
 
 
+class InstanceUpdateRequest(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    visibility: str | None = None
+
+
+class AttachConnectionRequest(BaseModel):
+    connection_id: str
+
+
+class VisibilityUpdateRequest(BaseModel):
+    visibility: str
+
+
 class SaveInstanceAsKitRequest(BaseModel):
     name: str
     description: str = ""
@@ -704,6 +718,180 @@ async def create_instance(
     await gateway_manager.reload_instance(data.slug)
 
     return {"status": "success", "instance_id": instance.id, "slug": instance.slug}
+
+
+@api_router.get("/instances/{slug}")
+def get_instance_detail(
+    slug: str,
+    db: Session = Depends(get_db),
+    current_user: UserEntity = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Retorna detalhes completos de uma instância, incluindo conexões vinculadas, mapa e tokens."""
+    inst = CentralRepository.get_instance_by_slug(db, slug)
+    if not inst:
+        raise HTTPException(status_code=404, detail="Instância não encontrada.")
+
+    if current_user.role != "epy_root":
+        if inst.visibility == "private" and inst.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Acesso restrito ao proprietário da instância.")
+
+    conns = [
+        {
+            "id": assoc.connection_id,
+            "name": assoc.connection.name if assoc.connection else assoc.connection_id,
+            "prefix": assoc.connection.prefix if assoc.connection else "",
+            "type": assoc.connection.type if assoc.connection else "",
+            "is_enabled": assoc.is_enabled,
+        }
+        for assoc in inst.connection_associations
+    ]
+    tokens = [
+        {"id": t.id, "token": t.token, "label": t.label}
+        for t in inst.tokens
+    ]
+    sources_map = {}
+    if inst.data_sources_map_json:
+        try:
+            sources_map = json.loads(inst.data_sources_map_json)
+        except Exception:
+            sources_map = {}
+
+    return {
+        "id": inst.id,
+        "user_id": inst.user_id,
+        "name": inst.name,
+        "slug": inst.slug,
+        "description": inst.description,
+        "visibility": getattr(inst, "visibility", "shared"),
+        "is_active": inst.is_active,
+        "connections": conns,
+        "tokens": tokens,
+        "sources_map": sources_map,
+        "created_at": inst.created_at.isoformat() if inst.created_at else None,
+    }
+
+
+@api_router.patch("/instances/{slug}")
+async def update_instance_metadata(
+    slug: str,
+    data: InstanceUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: UserEntity = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Atualiza metadados ou visibilidade de uma instância."""
+    inst = CentralRepository.get_instance_by_slug(db, slug)
+    if not inst:
+        raise HTTPException(status_code=404, detail="Instância não encontrada.")
+
+    if current_user.role != "epy_root" and inst.user_id and inst.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Apenas o criador ou o master admin podem alterar esta instância.")
+
+    if data.visibility:
+        validate_visibility_permission(current_user, data.visibility)
+
+    CentralRepository.update_instance(
+        db=db,
+        instance=inst,
+        name=data.name,
+        description=data.description,
+        visibility=data.visibility,
+    )
+    await gateway_manager.reload_instance(slug)
+    return {"status": "success", "slug": inst.slug, "visibility": inst.visibility}
+
+
+@api_router.delete("/instances/{slug}")
+def delete_instance_endpoint(
+    slug: str,
+    db: Session = Depends(get_db),
+    current_user: UserEntity = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Exclui uma instância permanentemente."""
+    inst = CentralRepository.get_instance_by_slug(db, slug)
+    if not inst:
+        raise HTTPException(status_code=404, detail="Instância não encontrada.")
+
+    if current_user.role != "epy_root" and inst.user_id and inst.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Apenas o criador ou o master admin podem excluir esta instância.")
+
+    CentralRepository.delete_instance(db, inst)
+    return {"status": "success", "message": f"Instância '{slug}' excluída com sucesso."}
+
+
+@api_router.post("/instances/{slug}/connections")
+async def attach_connection_endpoint(
+    slug: str,
+    data: AttachConnectionRequest,
+    db: Session = Depends(get_db),
+    current_user: UserEntity = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Vincula uma conexão ativa a esta instância."""
+    inst = CentralRepository.get_instance_by_slug(db, slug)
+    if not inst:
+        raise HTTPException(status_code=404, detail="Instância não encontrada.")
+
+    conn = CentralRepository.get_connection_by_id(db, data.connection_id)
+    if not conn:
+        raise HTTPException(status_code=404, detail=f"Conexão '{data.connection_id}' não encontrada.")
+
+    CentralRepository.attach_connection_to_instance(db, inst.id, conn.id)
+    await gateway_manager.reload_instance(slug)
+    return {"status": "success", "message": f"Conexão '{conn.name}' vinculada à instância '{inst.name}'."}
+
+
+@api_router.delete("/instances/{slug}/connections/{conn_id}")
+async def detach_connection_endpoint(
+    slug: str,
+    conn_id: str,
+    db: Session = Depends(get_db),
+    current_user: UserEntity = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Desvincula uma conexão ativa desta instância."""
+    inst = CentralRepository.get_instance_by_slug(db, slug)
+    if not inst:
+        raise HTTPException(status_code=404, detail="Instância não encontrada.")
+
+    CentralRepository.detach_connection_from_instance(db, inst.id, conn_id)
+    await gateway_manager.reload_instance(slug)
+    return {"status": "success", "message": f"Conexão '{conn_id}' desvinculada com sucesso."}
+
+
+@api_router.patch("/connections/{conn_id}/visibility")
+def update_connection_visibility_endpoint(
+    conn_id: str,
+    data: VisibilityUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: UserEntity = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Altera a visibilidade (private, shared, public) de uma conexão."""
+    validate_visibility_permission(current_user, data.visibility)
+    conn = CentralRepository.get_connection_by_id(db, conn_id)
+    if not conn:
+        raise HTTPException(status_code=404, detail="Conexão não encontrada.")
+
+    if current_user.role != "epy_root" and conn.user_id and conn.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Apenas o criador ou o master admin podem alterar esta conexão.")
+
+    CentralRepository.update_connection_visibility(db, conn, data.visibility)
+    return {"status": "success", "id": conn.id, "visibility": conn.visibility}
+
+
+@api_router.delete("/connections/{conn_id}")
+def delete_connection_endpoint(
+    conn_id: str,
+    db: Session = Depends(get_db),
+    current_user: UserEntity = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Exclui uma conexão upstream permanentemente."""
+    conn = CentralRepository.get_connection_by_id(db, conn_id)
+    if not conn:
+        raise HTTPException(status_code=404, detail="Conexão não encontrada.")
+
+    if current_user.role != "epy_root" and conn.user_id and conn.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Apenas o criador ou o master admin podem excluir esta conexão.")
+
+    CentralRepository.delete_connection(db, conn)
+    return {"status": "success", "message": f"Conexão '{conn_id}' excluída com sucesso."}
 
 
 # --- Modelos de Data-Source Kits ---
