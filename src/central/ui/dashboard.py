@@ -461,13 +461,14 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                                             <div class="p-3 rounded-xl border border-slate-750 bg-slate-950/60 flex items-center justify-between hover:border-slate-600 transition-colors shadow-xs">
                                                 <div class="overflow-hidden pr-4">
                                                     <div class="flex items-center gap-2">
-                                                        <code class="text-xs font-mono font-semibold text-blue-400" x-text="t.name"></code>
+                                                        <code class="text-xs font-mono font-semibold text-blue-400" x-text="t.namespaced_name || t.name"></code>
                                                         <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 font-mono" x-text="t.connection_id"></span>
+                                                        <span x-show="t.title && t.title !== (t.namespaced_name || t.name)" class="text-[11px] text-slate-400 truncate max-w-xs" x-text="t.title"></span>
                                                     </div>
                                                     <p class="text-xs text-slate-400 mt-1 line-clamp-1" x-text="t.description || 'Sem descrição.'"></p>
                                                 </div>
                                                 <!-- Toggle Switch -->
-                                                <button @click="toggleInstanceTool(currentInstanceDetail.slug, t.name)" 
+                                                <button @click="toggleInstanceTool(currentInstanceDetail.slug, t)" 
                                                         class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden"
                                                         :class="t.is_enabled ? 'bg-blue-600' : 'bg-slate-800 border border-slate-700'">
                                                     <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out"
@@ -1488,7 +1489,12 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 get filteredInstanceTools() {
                     if (!this.instanceToolFilter) return this.instanceTools;
                     const q = this.instanceToolFilter.toLowerCase();
-                    return this.instanceTools.filter(t => (t.name || '').toLowerCase().includes(q) || (t.description || '').toLowerCase().includes(q));
+                    return this.instanceTools.filter(t => 
+                        (t.namespaced_name || t.name || '').toLowerCase().includes(q) || 
+                        (t.title || '').toLowerCase().includes(q) || 
+                        (t.description || '').toLowerCase().includes(q) ||
+                        (t.connection_id || '').toLowerCase().includes(q)
+                    );
                 },
                 get availableConnectionsToAttach() {
                     if (!this.currentInstanceDetail) return this.connections;
@@ -1681,7 +1687,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                         const res = await this.apiFetch(`/api/v1/instances/${slug}/tools`);
                         if (res && res.ok) {
                             const data = await res.json();
-                            this.instanceTools = data.tools || [];
+                            this.instanceTools = Array.isArray(data) ? data : (data.tools || []);
                         }
                     } catch (e) {}
                 },
@@ -1695,14 +1701,19 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     } catch (e) {}
                 },
 
-                async toggleInstanceTool(slug, toolName) {
+                async toggleInstanceTool(slug, tool) {
                     try {
-                        const res = await this.apiFetch(`/api/v1/instances/${slug}/tools/${toolName}/toggle`, { method: 'POST' });
+                        const toolIdentifier = tool.id || tool.namespaced_name || tool.name;
+                        const targetEnabled = !tool.is_enabled;
+                        const res = await this.apiFetch(`/api/v1/instances/${slug}/tools/${encodeURIComponent(toolIdentifier)}/toggle`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ is_enabled: targetEnabled })
+                        });
                         if (res && res.ok) {
                             const data = await res.json();
-                            const t = this.instanceTools.find(item => item.name === toolName);
-                            if (t) t.is_enabled = data.is_enabled;
-                            this.showToast(`Ferramenta ${toolName} ${data.is_enabled ? 'ativada' : 'desativada'}.`, 'info');
+                            tool.is_enabled = data.is_enabled;
+                            this.showToast(`Ferramenta ${tool.namespaced_name || tool.name || toolIdentifier} ${data.is_enabled ? 'ativada' : 'desativada'}.`, 'info');
                         }
                     } catch (e) {
                         this.showToast('Erro ao alternar ferramenta.', 'error');
