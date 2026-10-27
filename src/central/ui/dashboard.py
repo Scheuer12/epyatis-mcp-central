@@ -288,6 +288,9 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
                                         <!-- Ações da Instância -->
                                         <div class="flex items-center gap-2">
+                                            <button @click="openEditInstanceModal(currentInstanceDetail)" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-blue-400 hover:text-blue-300 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors" title="Editar Nome e Descrição da Instância">
+                                                <i class="fa-solid fa-pen-to-square"></i> Editar
+                                            </button>
                                             <button @click="reloadInstance(currentInstanceDetail.slug)" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors">
                                                 <i class="fa-solid fa-rotate text-slate-400"></i> Recarregar
                                             </button>
@@ -621,15 +624,18 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                                 </div>
 
                                 <div class="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between text-xs">
-                                    <div class="flex items-center gap-2">
+                                    <div class="flex items-center gap-1.5 flex-wrap">
+                                        <button @click="openEditConnectionModal(c)" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-750 border border-slate-700 text-blue-400 hover:text-blue-300 rounded-md font-medium text-[11px] transition-colors" title="Editar Conexão">
+                                            <i class="fa-solid fa-pen-to-square mr-1"></i> Editar
+                                        </button>
                                         <button @click="discoverTools(c.id)" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-750 border border-slate-700 text-slate-200 rounded-md font-medium text-[11px] transition-colors" title="Redescobrir ferramentas">
-                                            <i class="fa-solid fa-arrows-rotate mr-1 text-slate-400"></i> Redescobrir
+                                            <i class="fa-solid fa-arrows-rotate mr-1 text-slate-400"></i> Sync
                                         </button>
                                         <button @click="openSaveAsTemplate(c)" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-750 border border-slate-700 text-slate-200 rounded-md font-medium text-[11px] transition-colors" title="Salvar configuração como modelo">
                                             <i class="fa-solid fa-bookmark mr-1 text-slate-400"></i> Modelo
                                         </button>
                                     </div>
-                                    <button @click="confirmDeleteConnection(c.id)" class="text-slate-400 hover:text-rose-400 p-1 transition-colors" title="Excluir Conexão">
+                                    <button @click="confirmDeleteConnection(c.id)" class="text-slate-400 hover:text-rose-400 p-1.5 transition-colors" title="Excluir Conexão">
                                         <i class="fa-solid fa-trash-can text-xs"></i>
                                     </button>
                                 </div>
@@ -661,10 +667,18 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                                     <p class="text-xs text-slate-400 mt-3" x-text="t.description"></p>
                                 </div>
                                 <div class="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between">
-                                    <span class="text-[11px] text-slate-500" x-text="(t.form_fields || []).length + ' campos'"></span>
-                                    <button @click="selectTemplate(t)" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5">
-                                        <i class="fa-solid fa-wand-magic-sparkles text-[10px]"></i> Conectar
-                                    </button>
+                                    <span class="text-[11px] text-slate-500 font-mono" x-text="'prefix: ' + (t.prefix || 'custom')"></span>
+                                    <div class="flex items-center gap-1.5">
+                                        <button @click="openEditTemplateModal(t)" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-750 border border-slate-700 text-blue-400 hover:text-blue-300 rounded-md text-[11px] font-medium transition-colors" title="Editar Modelo">
+                                            <i class="fa-solid fa-pen-to-square mr-1"></i> Editar
+                                        </button>
+                                        <button @click="selectTemplate(t)" class="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded-md text-[11px] font-semibold transition-colors flex items-center gap-1 shadow-xs" title="Instanciar conexão a partir deste modelo">
+                                            <i class="fa-solid fa-wand-magic-sparkles text-[10px]"></i> Conectar
+                                        </button>
+                                        <button @click="confirmDeleteTemplate(t)" class="text-slate-400 hover:text-rose-400 p-1 transition-colors" title="Excluir Modelo">
+                                            <i class="fa-solid fa-trash-can text-xs"></i>
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </template>
@@ -704,10 +718,15 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                             </div>
 
                             <div class="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between">
-                                <button @click="applyKitToPrompt(k.id)" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold transition-colors flex items-center gap-1">
-                                    <i class="fa-solid fa-arrow-right-to-bracket text-[10px]"></i> Aplicar em Instância
-                                </button>
-                                <button @click="deleteKit(k.id)" class="text-slate-400 hover:text-rose-400 p-1 text-xs">
+                                <div class="flex items-center gap-1.5">
+                                    <button @click="applyKitToPrompt(k.id)" class="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded-md text-[11px] font-semibold transition-colors flex items-center gap-1 shadow-xs" title="Aplicar este kit na instância">
+                                        <i class="fa-solid fa-arrow-right-to-bracket text-[10px]"></i> Aplicar
+                                    </button>
+                                    <button @click="openEditKitModal(k)" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-750 border border-slate-700 text-blue-400 hover:text-blue-300 rounded-md text-[11px] font-medium transition-colors" title="Editar Kit de Conhecimento">
+                                        <i class="fa-solid fa-pen-to-square mr-1"></i> Editar
+                                    </button>
+                                </div>
+                                <button @click="confirmDeleteKit(k)" class="text-slate-400 hover:text-rose-400 p-1.5 text-xs transition-colors" title="Excluir Kit">
                                     <i class="fa-solid fa-trash-can"></i>
                                 </button>
                             </div>
@@ -1370,7 +1389,246 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         </div>
     </div>
 
-    <!-- Script Alpine.js do Aplicativo -->
+    <!-- Modal: Editar Conexão -->
+    <div x-show="showEditConnectionModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4" @click.self="showEditConnectionModal = false">
+        <div class="bg-slate-900 rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-750 text-slate-100 space-y-4">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-800">
+                <h3 class="text-sm font-bold text-slate-100 flex items-center gap-2">
+                    <i class="fa-solid fa-pen-to-square text-blue-400"></i> Editar Conexão
+                </h3>
+                <button @click="showEditConnectionModal = false" class="text-slate-400 hover:text-slate-200"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="space-y-3 max-h-[70vh] overflow-y-auto pr-1">
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">ID da Conexão (Fixo)</label>
+                        <input type="text" x-model="editConnectionForm.id" disabled class="w-full text-xs border border-slate-800 rounded-lg p-2.5 font-mono bg-slate-950/50 text-slate-400 cursor-not-allowed">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Prefixo de Ferramentas</label>
+                        <input type="text" x-model="editConnectionForm.prefix" class="w-full text-xs border border-slate-700 rounded-lg p-2.5 font-mono bg-slate-950 text-slate-100 focus:border-blue-500">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Nome Amigável</label>
+                    <input type="text" x-model="editConnectionForm.name" class="w-full text-xs border border-slate-700 rounded-lg p-2.5 bg-slate-950 text-slate-100 focus:border-blue-500">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Tipo de Conexão</label>
+                        <select x-model="editConnectionForm.type" class="w-full text-xs border border-slate-700 rounded-lg p-2.5 bg-slate-950 text-slate-100 focus:border-blue-500">
+                            <option value="stdio">stdio (Local CLI/Process)</option>
+                            <option value="remote_mcp">remote_mcp (SSE Endpoint)</option>
+                            <option value="openapi">openapi (REST API)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Visibilidade</label>
+                        <select x-model="editConnectionForm.visibility" class="w-full text-xs border border-slate-700 rounded-lg p-2.5 bg-slate-950 text-slate-100 focus:border-blue-500">
+                            <option value="private">Privado</option>
+                            <option value="shared">Compartilhado</option>
+                            <option value="public" x-show="currentUser.role === 'epy_root'">Público (Root)</option>
+                        </select>
+                    </div>
+                </div>
+                <template x-if="editConnectionForm.type === 'stdio'">
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-300 mb-1">Comando Executável</label>
+                            <input type="text" x-model="editConnectionForm.command" placeholder="Ex: npx, python, uvx" class="w-full text-xs border border-slate-700 rounded-lg p-2.5 font-mono bg-slate-950 text-slate-100 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-300 mb-1">Argumentos (Separados por espaço)</label>
+                            <input type="text" x-model="editConnectionForm.argsText" placeholder="Ex: -y @us-all/google-drive-mcp" class="w-full text-xs border border-slate-700 rounded-lg p-2.5 font-mono bg-slate-950 text-slate-100 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-300 mb-1">Variáveis de Ambiente (JSON)</label>
+                            <textarea x-model="editConnectionForm.envText" rows="3" class="w-full text-xs border border-slate-700 rounded-lg p-2.5 font-mono bg-slate-950 text-slate-100 focus:border-blue-500"></textarea>
+                        </div>
+                    </div>
+                </template>
+                <template x-if="editConnectionForm.type === 'remote_mcp' || editConnectionForm.type === 'openapi'">
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-300 mb-1">URL do Endpoint</label>
+                            <input type="text" x-model="editConnectionForm.url" placeholder="https://api.exemplo.com/mcp" class="w-full text-xs border border-slate-700 rounded-lg p-2.5 font-mono bg-slate-950 text-slate-100 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-300 mb-1">Configurações de Auth / Headers (JSON)</label>
+                            <textarea x-model="editConnectionForm.authConfigText" rows="3" class="w-full text-xs border border-slate-700 rounded-lg p-2.5 font-mono bg-slate-950 text-slate-100 focus:border-blue-500"></textarea>
+                        </div>
+                    </div>
+                </template>
+            </div>
+            <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
+                <button @click="showEditConnectionModal = false" class="px-4 py-2 text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg">Cancelar</button>
+                <button @click="saveEditedConnection()" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-xs">Salvar Alterações</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Editar Modelo de Conexão -->
+    <div x-show="showEditTemplateModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4" @click.self="showEditTemplateModal = false">
+        <div class="bg-slate-900 rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-750 text-slate-100 space-y-4">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-800">
+                <h3 class="text-sm font-bold text-slate-100 flex items-center gap-2">
+                    <i class="fa-solid fa-wand-magic-sparkles text-blue-400"></i> Editar Modelo de Conexão
+                </h3>
+                <button @click="showEditTemplateModal = false" class="text-slate-400 hover:text-slate-200"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="space-y-3 max-h-[70vh] overflow-y-auto pr-1">
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Nome do Modelo</label>
+                    <input type="text" x-model="editTemplateForm.name" class="w-full text-xs border border-slate-700 rounded-lg p-2.5 bg-slate-950 text-slate-100 focus:border-blue-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Descrição</label>
+                    <textarea x-model="editTemplateForm.description" rows="2" class="w-full text-xs border border-slate-700 rounded-lg p-2.5 bg-slate-950 text-slate-100 focus:border-blue-500"></textarea>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Prefixo Padrão</label>
+                        <input type="text" x-model="editTemplateForm.prefix" class="w-full text-xs border border-slate-700 rounded-lg p-2.5 font-mono bg-slate-950 text-slate-100 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Visibilidade</label>
+                        <select x-model="editTemplateForm.visibility" class="w-full text-xs border border-slate-700 rounded-lg p-2.5 bg-slate-950 text-slate-100 focus:border-blue-500">
+                            <option value="private">Privado</option>
+                            <option value="shared">Compartilhado</option>
+                            <option value="public" x-show="currentUser.role === 'epy_root'">Público (Root)</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Comando Executável</label>
+                    <input type="text" x-model="editTemplateForm.command" class="w-full text-xs border border-slate-700 rounded-lg p-2.5 font-mono bg-slate-950 text-slate-100 focus:border-blue-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Argumentos (Separados por espaço)</label>
+                    <input type="text" x-model="editTemplateForm.argsText" class="w-full text-xs border border-slate-700 rounded-lg p-2.5 font-mono bg-slate-950 text-slate-100 focus:border-blue-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Variáveis de Ambiente Padrão (JSON)</label>
+                    <textarea x-model="editTemplateForm.envText" rows="3" class="w-full text-xs border border-slate-700 rounded-lg p-2.5 font-mono bg-slate-950 text-slate-100 focus:border-blue-500"></textarea>
+                </div>
+            </div>
+            <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
+                <button @click="showEditTemplateModal = false" class="px-4 py-2 text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg">Cancelar</button>
+                <button @click="saveEditedTemplate()" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-xs">Salvar Modelo</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Editar Kit de Conhecimento -->
+    <div x-show="showEditKitModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4" @click.self="showEditKitModal = false">
+        <div class="bg-slate-900 rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-750 text-slate-100 space-y-4">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-800">
+                <h3 class="text-sm font-bold text-slate-100 flex items-center gap-2">
+                    <i class="fa-solid fa-book-atlas text-blue-400"></i> Editar Kit de Conhecimento
+                </h3>
+                <button @click="showEditKitModal = false" class="text-slate-400 hover:text-slate-200"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="space-y-3 max-h-[70vh] overflow-y-auto pr-1">
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Nome do Kit</label>
+                        <input type="text" x-model="editKitForm.name" class="w-full text-xs border border-slate-700 rounded-lg p-2.5 bg-slate-950 text-slate-100 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Categoria</label>
+                        <input type="text" x-model="editKitForm.category" class="w-full text-xs border border-slate-700 rounded-lg p-2.5 bg-slate-950 text-slate-100 focus:border-blue-500">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Descrição</label>
+                    <textarea x-model="editKitForm.description" rows="2" class="w-full text-xs border border-slate-700 rounded-lg p-2.5 bg-slate-950 text-slate-100 focus:border-blue-500"></textarea>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Visibilidade</label>
+                    <select x-model="editKitForm.visibility" class="w-full text-xs border border-slate-700 rounded-lg p-2.5 bg-slate-950 text-slate-100 focus:border-blue-500">
+                        <option value="private">Privado</option>
+                        <option value="shared">Compartilhado</option>
+                        <option value="public" x-show="currentUser.role === 'epy_root'">Público (Root)</option>
+                    </select>
+                </div>
+
+                <!-- Fontes cadastradas no Kit -->
+                <div class="pt-2 border-t border-slate-800 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Fontes de Dados do Kit</span>
+                        <button @click="addEditKitSource()" class="text-xs text-blue-400 hover:text-blue-300 font-semibold flex items-center gap-1">
+                            <i class="fa-solid fa-plus text-[10px]"></i> Adicionar Fonte
+                        </button>
+                    </div>
+                    <div class="space-y-2">
+                        <template x-for="(s, sIdx) in editKitForm.sources" :key="sIdx">
+                            <div class="p-3 rounded-xl border border-slate-750 bg-slate-950/60 space-y-2 relative">
+                                <button @click="removeEditKitSource(sIdx)" class="absolute top-2.5 right-2.5 text-slate-500 hover:text-rose-400 text-xs">
+                                    <i class="fa-solid fa-xmark"></i>
+                                </button>
+                                <div class="grid grid-cols-2 gap-2 pr-6">
+                                    <div>
+                                        <label class="block text-[10px] text-slate-400">Nome</label>
+                                        <input type="text" x-model="s.name" class="w-full text-xs border border-slate-700 rounded p-1.5 bg-slate-950 text-slate-100">
+                                    </div>
+                                    <div>
+                                        <label class="block text-[10px] text-slate-400">Tipo</label>
+                                        <select x-model="s.type" class="w-full text-xs border border-slate-700 rounded p-1.5 bg-slate-950 text-slate-100">
+                                            <option value="database">Banco de Dados</option>
+                                            <option value="api">API / Swagger</option>
+                                            <option value="drive">Drive / Cloud</option>
+                                            <option value="doc">Documento / Wiki</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] text-slate-400">Descrição / Diretriz para o Agente</label>
+                                    <input type="text" x-model="s.description" class="w-full text-xs border border-slate-700 rounded p-1.5 bg-slate-950 text-slate-100">
+                                </div>
+                            </div>
+                        </template>
+                        <template x-if="(editKitForm.sources || []).length === 0">
+                            <p class="text-xs text-slate-500 italic p-3 text-center border border-dashed border-slate-800 rounded-lg">Nenhuma fonte cadastrada neste kit.</p>
+                        </template>
+                    </div>
+                </div>
+            </div>
+            <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
+                <button @click="showEditKitModal = false" class="px-4 py-2 text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg">Cancelar</button>
+                <button @click="saveEditedKit()" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-xs">Salvar Alterações</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Editar Instância -->
+    <div x-show="showEditInstanceModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4" @click.self="showEditInstanceModal = false">
+        <div class="bg-slate-900 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-750 text-slate-100 space-y-4">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-800">
+                <h3 class="text-sm font-bold text-slate-100 flex items-center gap-2">
+                    <i class="fa-solid fa-pen-to-square text-blue-400"></i> Editar Detalhes da Instância
+                </h3>
+                <button @click="showEditInstanceModal = false" class="text-slate-400 hover:text-slate-200"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Identificador Slug (Fixo)</label>
+                    <input type="text" x-model="editInstanceForm.slug" disabled class="w-full text-xs border border-slate-800 rounded-lg p-2.5 font-mono bg-slate-950/50 text-slate-400 cursor-not-allowed">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Nome da Instância</label>
+                    <input type="text" x-model="editInstanceForm.name" class="w-full text-xs border border-slate-700 rounded-lg p-2.5 bg-slate-950 text-slate-100 focus:border-blue-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Descrição Operacional</label>
+                    <textarea x-model="editInstanceForm.description" rows="3" class="w-full text-xs border border-slate-700 rounded-lg p-2.5 bg-slate-950 text-slate-100 focus:border-blue-500"></textarea>
+                </div>
+            </div>
+            <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
+                <button @click="showEditInstanceModal = false" class="px-4 py-2 text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg">Cancelar</button>
+                <button @click="saveEditedInstance()" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-xs">Salvar Alterações</button>
+            </div>
+        </div>
+    </div>
     <script>
         function centralApp() {
             return {
@@ -1391,6 +1649,14 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 showSaveAsKitModal: false,
                 showConfirmModal: false,
                 showInstantiateModal: false,
+                showEditConnectionModal: false,
+                editConnectionForm: { id: '', name: '', prefix: '', type: 'stdio', command: '', argsText: '', envText: '{}', url: '', authConfigText: '{}', visibility: 'shared' },
+                showEditTemplateModal: false,
+                editTemplateForm: { id: '', name: '', description: '', prefix: '', type: 'stdio', command: '', argsText: '', envText: '{}', visibility: 'shared' },
+                showEditKitModal: false,
+                editKitForm: { id: '', name: '', category: 'Geral', description: '', visibility: 'shared', sources: [] },
+                showEditInstanceModal: false,
+                editInstanceForm: { slug: '', name: '', description: '' },
                 showShareModal: false,
                 shareTargetType: 'connection',
                 shareTargetId: '',
@@ -2341,16 +2607,239 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     }
                 },
 
-                async deleteKit(kitId) {
-                    if (!confirm('Deseja realmente excluir este kit?')) return;
+                // --- Edição e Exclusão Segura de Recursos ---
+
+                openEditConnectionModal(c) {
+                    this.editConnectionForm = {
+                        id: c.id,
+                        name: c.name || '',
+                        prefix: c.prefix || c.id,
+                        type: c.type || 'stdio',
+                        command: c.command || '',
+                        argsText: Array.isArray(c.args) ? c.args.join(' ') : (c.args || ''),
+                        envText: c.env && Object.keys(c.env).length > 0 ? JSON.stringify(c.env, null, 2) : '{}',
+                        url: c.url || '',
+                        authConfigText: c.auth_config && Object.keys(c.auth_config).length > 0 ? JSON.stringify(c.auth_config, null, 2) : '{}',
+                        visibility: c.visibility || 'shared'
+                    };
+                    this.showEditConnectionModal = true;
+                },
+
+                async saveEditedConnection() {
                     try {
-                        const res = await this.apiFetch(`/api/v1/data-source-kits/${kitId}`, { method: 'DELETE' });
+                        let parsedArgs = [];
+                        const trimmedArgs = (this.editConnectionForm.argsText || '').trim();
+                        if (trimmedArgs.startsWith('[')) {
+                            parsedArgs = JSON.parse(trimmedArgs);
+                        } else if (trimmedArgs) {
+                            parsedArgs = trimmedArgs.split(/\\s+/);
+                        }
+                        let parsedEnv = {};
+                        if ((this.editConnectionForm.envText || '').trim()) {
+                            parsedEnv = JSON.parse(this.editConnectionForm.envText);
+                        }
+                        let parsedAuth = {};
+                        if ((this.editConnectionForm.authConfigText || '').trim()) {
+                            parsedAuth = JSON.parse(this.editConnectionForm.authConfigText);
+                        }
+                        const payload = {
+                            name: this.editConnectionForm.name,
+                            prefix: this.editConnectionForm.prefix,
+                            type: this.editConnectionForm.type,
+                            command: this.editConnectionForm.command || null,
+                            args: parsedArgs,
+                            env: parsedEnv,
+                            url: this.editConnectionForm.url || null,
+                            auth_config: parsedAuth,
+                            visibility: this.editConnectionForm.visibility
+                        };
+                        const res = await this.apiFetch(`/api/v1/connections/${this.editConnectionForm.id}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
                         if (res && res.ok) {
-                            this.showToast('Kit excluído com sucesso.', 'info');
-                            await this.fetchDataSourceKits();
+                            this.showEditConnectionModal = false;
+                            this.showToast('Conexão atualizada com sucesso!', 'success');
+                            await this.refreshAll();
+                            if (this.selectedInstanceSlug) await this.selectInstance(this.selectedInstanceSlug);
+                        } else {
+                            const err = await res.json();
+                            this.showToast(err.detail || 'Erro ao atualizar conexão.', 'error');
                         }
                     } catch (e) {
-                        this.showToast('Erro ao excluir kit.', 'error');
+                        this.showToast('Erro de sintaxe JSON nos parâmetros: ' + e.message, 'error');
+                    }
+                },
+
+                openEditTemplateModal(t) {
+                    this.editTemplateForm = {
+                        id: t.id,
+                        name: t.name || '',
+                        description: t.description || '',
+                        prefix: t.prefix || '',
+                        type: t.type || 'stdio',
+                        command: t.command || '',
+                        argsText: Array.isArray(t.args) ? t.args.join(' ') : (t.args || ''),
+                        envText: t.env && Object.keys(t.env).length > 0 ? JSON.stringify(t.env, null, 2) : '{}',
+                        visibility: t.visibility || 'shared'
+                    };
+                    this.showEditTemplateModal = true;
+                },
+
+                async saveEditedTemplate() {
+                    try {
+                        let parsedArgs = [];
+                        const trimmedArgs = (this.editTemplateForm.argsText || '').trim();
+                        if (trimmedArgs.startsWith('[')) {
+                            parsedArgs = JSON.parse(trimmedArgs);
+                        } else if (trimmedArgs) {
+                            parsedArgs = trimmedArgs.split(/\\s+/);
+                        }
+                        let parsedEnv = {};
+                        if ((this.editTemplateForm.envText || '').trim()) {
+                            parsedEnv = JSON.parse(this.editTemplateForm.envText);
+                        }
+                        const payload = {
+                            name: this.editTemplateForm.name,
+                            description: this.editTemplateForm.description,
+                            prefix: this.editTemplateForm.prefix,
+                            type: this.editTemplateForm.type,
+                            command: this.editTemplateForm.command || null,
+                            args: parsedArgs,
+                            env: parsedEnv,
+                            visibility: this.editTemplateForm.visibility
+                        };
+                        const res = await this.apiFetch(`/api/v1/connection-templates/${this.editTemplateForm.id}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+                        if (res && res.ok) {
+                            this.showEditTemplateModal = false;
+                            this.showToast('Modelo atualizado com sucesso!', 'success');
+                            await this.fetchTemplates();
+                        } else {
+                            const err = await res.json();
+                            this.showToast(err.detail || 'Erro ao atualizar modelo.', 'error');
+                        }
+                    } catch (e) {
+                        this.showToast('Erro de sintaxe JSON nos parâmetros: ' + e.message, 'error');
+                    }
+                },
+
+                confirmDeleteTemplate(t) {
+                    this.confirmTitle = `Excluir Modelo "${t.name}"`;
+                    this.confirmMessage = 'Tem certeza que deseja excluir esta receita de modelo? Conexões já instanciadas continuarão funcionando.';
+                    this.pendingConfirmAction = async () => {
+                        const res = await this.apiFetch(`/api/v1/connection-templates/${t.id}`, { method: 'DELETE' });
+                        if (res && res.ok) {
+                            this.showToast('Modelo excluído com sucesso.', 'success');
+                            await this.fetchTemplates();
+                        } else {
+                            this.showToast('Erro ao excluir modelo.', 'error');
+                        }
+                    };
+                    this.showConfirmModal = true;
+                },
+
+                openEditKitModal(k) {
+                    this.editKitForm = {
+                        id: k.id,
+                        name: k.name || '',
+                        category: k.category || 'Geral',
+                        description: k.description || '',
+                        visibility: k.visibility || 'shared',
+                        sources: JSON.parse(JSON.stringify(k.sources || []))
+                    };
+                    this.showEditKitModal = true;
+                },
+
+                addEditKitSource() {
+                    if (!this.editKitForm.sources) this.editKitForm.sources = [];
+                    this.editKitForm.sources.push({ name: 'Nova Fonte', type: 'database', description: '', uri: '' });
+                },
+
+                removeEditKitSource(index) {
+                    this.editKitForm.sources.splice(index, 1);
+                },
+
+                async saveEditedKit() {
+                    try {
+                        const payload = {
+                            name: this.editKitForm.name,
+                            category: this.editKitForm.category,
+                            description: this.editKitForm.description,
+                            visibility: this.editKitForm.visibility,
+                            sources: this.editKitForm.sources
+                        };
+                        const res = await this.apiFetch(`/api/v1/data-source-kits/${this.editKitForm.id}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+                        if (res && res.ok) {
+                            this.showEditKitModal = false;
+                            this.showToast('Kit de Conhecimento atualizado com sucesso!', 'success');
+                            await this.fetchDataSourceKits();
+                        } else {
+                            const err = await res.json();
+                            this.showToast(err.detail || 'Erro ao atualizar kit.', 'error');
+                        }
+                    } catch (e) {
+                        this.showToast('Erro ao salvar kit: ' + e.message, 'error');
+                    }
+                },
+
+                confirmDeleteKit(k) {
+                    this.confirmTitle = `Excluir Kit "${k.name}"`;
+                    this.confirmMessage = 'Tem certeza que deseja excluir este kit de conhecimento? Instâncias que já o utilizaram não serão afetadas.';
+                    this.pendingConfirmAction = async () => {
+                        const res = await this.apiFetch(`/api/v1/data-source-kits/${k.id}`, { method: 'DELETE' });
+                        if (res && res.ok) {
+                            this.showToast('Kit excluído com sucesso.', 'success');
+                            await this.fetchDataSourceKits();
+                        } else {
+                            this.showToast('Erro ao excluir kit.', 'error');
+                        }
+                    };
+                    this.showConfirmModal = true;
+                },
+
+                openEditInstanceModal(inst) {
+                    this.editInstanceForm = {
+                        slug: inst.slug,
+                        name: inst.name || '',
+                        description: inst.description || ''
+                    };
+                    this.showEditInstanceModal = true;
+                },
+
+                async saveEditedInstance() {
+                    try {
+                        const payload = {
+                            name: this.editInstanceForm.name,
+                            description: this.editInstanceForm.description
+                        };
+                        const res = await this.apiFetch(`/api/v1/instances/${this.editInstanceForm.slug}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+                        if (res && res.ok) {
+                            this.showEditInstanceModal = false;
+                            this.showToast('Instância atualizada com sucesso!', 'success');
+                            if (this.currentInstanceDetail && this.currentInstanceDetail.slug === this.editInstanceForm.slug) {
+                                this.currentInstanceDetail.name = this.editInstanceForm.name;
+                                this.currentInstanceDetail.description = this.editInstanceForm.description;
+                            }
+                            await this.fetchInstances();
+                        } else {
+                            const err = await res.json();
+                            this.showToast(err.detail || 'Erro ao atualizar instância.', 'error');
+                        }
+                    } catch (e) {
+                        this.showToast('Erro ao salvar instância: ' + e.message, 'error');
                     }
                 },
 

@@ -775,6 +775,45 @@ class CentralRepository:
             return True
         return False
 
+    @staticmethod
+    def update_template(
+        db: Session,
+        template_id: str,
+        name: str | None = None,
+        description: str | None = None,
+        template_type: str | None = None,
+        prefix: str | None = None,
+        command: str | None = None,
+        args: list[str] | None = None,
+        env: dict[str, str] | None = None,
+        auth_config: dict[str, Any] | None = None,
+        visibility: str | None = None,
+    ) -> ConnectionTemplateEntity | None:
+        tmpl = db.query(ConnectionTemplateEntity).filter(ConnectionTemplateEntity.id == template_id).first()
+        if not tmpl:
+            return None
+        if name is not None:
+            tmpl.name = name
+        if description is not None:
+            tmpl.description = description
+        if template_type is not None:
+            tmpl.type = template_type
+        if prefix is not None:
+            tmpl.prefix = prefix
+        if command is not None:
+            tmpl.command = command
+        if args is not None:
+            tmpl.args = args
+        if env is not None:
+            tmpl.env = env
+        if auth_config is not None:
+            tmpl.auth_config = auth_config
+        if visibility is not None:
+            tmpl.visibility = visibility
+        db.commit()
+        db.refresh(tmpl)
+        return tmpl
+
     # --- Modelos de Data-Source Kits ---
 
     @staticmethod

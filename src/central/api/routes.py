@@ -96,6 +96,30 @@ class ConnectionCreateRequest(BaseModel):
     visibility: str = Field("shared", description="private | shared | public")
 
 
+class ConnectionUpdateRequest(BaseModel):
+    name: str = Field(..., description="Nome amigável da conexão")
+    type: str = Field("stdio", description="stdio | remote_mcp | internal | openapi")
+    prefix: str = Field(..., description="Prefixo de namespace das ferramentas")
+    command: str | None = None
+    args: list[str] = Field(default_factory=list)
+    env: dict[str, str] = Field(default_factory=dict)
+    url: str | None = None
+    auth_config: dict[str, Any] = Field(default_factory=dict)
+    visibility: str | None = Field(None, description="private | shared | public")
+
+
+class ConnectionTemplateUpdateRequest(BaseModel):
+    name: str = Field(..., description="Nome amigável do modelo")
+    description: str = Field(default="", description="Descrição de uso do modelo")
+    type: str = Field("stdio", description="stdio | remote_mcp | internal | openapi")
+    prefix: str = Field(..., description="Prefixo de namespace das ferramentas")
+    command: str | None = None
+    args: list[str] = Field(default_factory=list)
+    env: dict[str, str] = Field(default_factory=dict)
+    auth_config: dict[str, Any] = Field(default_factory=dict)
+    visibility: str | None = Field(None, description="private | shared | public")
+
+
 class SaveConnectionAsTemplateRequest(BaseModel):
     name: str | None = None
     description: str = ""
@@ -602,6 +626,55 @@ def create_connection(
     return {"status": "success", "connection_id": conn.id}
 
 
+@api_router.put("/connections/{conn_id}")
+async def update_connection_endpoint(
+    conn_id: str,
+    data: ConnectionUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: UserEntity = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Atualiza as configurações de uma conexão existente."""
+    conn = CentralRepository.get_connection_by_id(db, conn_id)
+    if not conn:
+        raise HTTPException(status_code=404, detail="Conexão não encontrada.")
+
+    if current_user.role != "epy_root" and conn.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Apenas o criador ou o master admin podem alterar esta conexão.")
+
+    if data.visibility:
+        validate_visibility_permission(current_user, data.visibility)
+
+    if data.type == "stdio":
+        try:
+            validate_stdio_command(data.command, data.args)
+        except ValueError as err:
+            raise HTTPException(status_code=400, detail=str(err))
+
+    updated_conn = CentralRepository.create_or_update_connection(
+        db=db,
+        connection_id=conn_id,
+        name=data.name,
+        conn_type=data.type,
+        prefix=data.prefix,
+        command=data.command,
+        args=data.args,
+        env=data.env,
+        url=data.url,
+        auth_config=data.auth_config,
+        visibility=data.visibility or conn.visibility,
+    )
+
+    # Recarrega upstreams nas instâncias ativas do gateway_manager se aplicável
+    for slug, gw in list(gateway_manager.instances.items()):
+        if conn_id in gw.upstreams:
+            try:
+                await gateway_manager.reload_instance(slug, db)
+            except Exception as e:
+                logger.warning(f"Erro ao recarregar instância '{slug}' após atualização da conexão '{conn_id}': {e}")
+
+    return {"status": "success", "connection_id": updated_conn.id}
+
+
 @api_router.post("/connections/{conn_id}/save-as-template")
 def save_connection_as_template(
     conn_id: str,
@@ -737,6 +810,46 @@ def delete_connection_template(
     return {"status": "success", "message": "Modelo de conexão excluído com sucesso."}
 
 
+@api_router.put("/connection-templates/{template_id}")
+def update_connection_template_endpoint(
+    template_id: str,
+    data: ConnectionTemplateUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: UserEntity = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Atualiza um modelo de conexão existente."""
+    tmpl = CentralRepository.get_template_by_id(db, template_id)
+    if not tmpl:
+        raise HTTPException(status_code=404, detail="Modelo de conexão não encontrado.")
+
+    if current_user.role != "epy_root" and tmpl.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Apenas o criador ou o master admin podem alterar este modelo.")
+
+    if data.visibility:
+        validate_visibility_permission(current_user, data.visibility)
+
+    if data.type == "stdio":
+        try:
+            validate_stdio_command(data.command, data.args)
+        except ValueError as err:
+            raise HTTPException(status_code=400, detail=str(err))
+
+    CentralRepository.update_template(
+        db=db,
+        template_id=template_id,
+        name=data.name,
+        description=data.description,
+        template_type=data.type,
+        prefix=data.prefix,
+        command=data.command,
+        args=data.args,
+        env=data.env,
+        auth_config=data.auth_config,
+        visibility=data.visibility or tmpl.visibility,
+    )
+    return {"status": "success", "template_id": template_id}
+
+
 @api_router.post("/connection-templates/{template_id}/instantiate")
 def instantiate_connection_template(
     template_id: str,
@@ -768,6 +881,55 @@ def instantiate_connection_template(
         user_id=current_user.id,
     )
     return {"status": "success", "connection_id": conn.id}
+
+
+@api_router.put("/connections/{conn_id}")
+async def update_connection_endpoint(
+    conn_id: str,
+    data: ConnectionUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: UserEntity = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Atualiza as configurações de uma conexão existente."""
+    conn = CentralRepository.get_connection_by_id(db, conn_id)
+    if not conn:
+        raise HTTPException(status_code=404, detail="Conexão não encontrada.")
+
+    if current_user.role != "epy_root" and conn.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Apenas o criador ou o master admin podem alterar esta conexão.")
+
+    if data.visibility:
+        validate_visibility_permission(current_user, data.visibility)
+
+    if data.type == "stdio":
+        try:
+            validate_stdio_command(data.command, data.args)
+        except ValueError as err:
+            raise HTTPException(status_code=400, detail=str(err))
+
+    updated_conn = CentralRepository.create_or_update_connection(
+        db=db,
+        connection_id=conn_id,
+        name=data.name,
+        conn_type=data.type,
+        prefix=data.prefix,
+        command=data.command,
+        args=data.args,
+        env=data.env,
+        url=data.url,
+        auth_config=data.auth_config,
+        visibility=data.visibility or conn.visibility,
+    )
+
+    # Recarrega upstreams nas instâncias ativas do gateway_manager se aplicável
+    for slug, gw in list(gateway_manager.instances.items()):
+        if conn_id in gw.upstreams:
+            try:
+                await gateway_manager.reload_instance(slug, db)
+            except Exception as e:
+                logger.warning(f"Erro ao recarregar instância '{slug}' após atualização da conexão '{conn_id}': {e}")
+
+    return {"status": "success", "connection_id": updated_conn.id}
 
 
 @api_router.post("/connections/{conn_id}/discover")
@@ -1002,6 +1164,7 @@ def get_instance_detail(
     }
 
 
+@api_router.put("/instances/{slug}")
 @api_router.patch("/instances/{slug}")
 async def update_instance_metadata(
     slug: str,
@@ -1028,7 +1191,13 @@ async def update_instance_metadata(
         visibility=data.visibility,
     )
     await gateway_manager.reload_instance(slug)
-    return {"status": "success", "slug": inst.slug, "visibility": inst.visibility}
+    return {
+        "status": "success",
+        "slug": inst.slug,
+        "name": inst.name,
+        "description": inst.description,
+        "visibility": inst.visibility,
+    }
 
 
 @api_router.get("/instances/{slug}/shares")
