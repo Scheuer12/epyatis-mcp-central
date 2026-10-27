@@ -491,8 +491,39 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                                                         <input type="text" x-model="s.native_resource_id" placeholder="ex: 120363405785055048@g.us ou ID da Planilha" class="w-full text-xs font-mono border border-slate-700 rounded-md p-1.5 bg-slate-900 text-emerald-400 focus:border-blue-500">
                                                     </div>
                                                     <div>
-                                                        <label class="block text-[10px] font-semibold text-slate-400 uppercase">Tags de Descoberta (separadas por vírgula)</label>
-                                                        <input type="text" :value="(s.tags || []).join(', ')" @input="s.tags = $event.target.value.split(',').map(t => t.trim()).filter(Boolean)" placeholder="ex: procurement, whatsapp, official" class="w-full text-xs border border-slate-700 rounded-md p-1.5 bg-slate-900 text-amber-300 focus:border-blue-500">
+                                                        <div class="flex items-center justify-between mb-1">
+                                                            <label class="block text-[10px] font-semibold text-slate-400 uppercase">Tags de Descoberta Operacional</label>
+                                                            <span class="text-[10px] text-slate-500">Pressione Enter ou vírgula para adicionar</span>
+                                                        </div>
+                                                        
+                                                        <!-- Container Interativo de Tags (Badges + Input) -->
+                                                        <div class="p-2 rounded-lg border border-slate-700 bg-slate-900/90 flex flex-wrap items-center gap-1.5 min-h-[42px] focus-within:border-blue-500">
+                                                            <template x-for="(tag, tIdx) in (s.tags || [])" :key="tIdx">
+                                                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-950/40 border border-amber-800/60 text-amber-300 text-xs font-mono">
+                                                                    <span x-text="tag"></span>
+                                                                    <button type="button" @click.stop="removeTag(s, tIdx)" class="text-amber-400/70 hover:text-rose-400 ml-0.5 p-0.5 cursor-pointer" title="Remover tag">
+                                                                        <i class="fa-solid fa-xmark text-[10px]"></i>
+                                                                    </button>
+                                                                </span>
+                                                            </template>
+                                                            
+                                                            <input type="text"
+                                                                   placeholder="+ Nova tag..."
+                                                                   @keydown.enter.prevent="addTagFromInput(s, $event)"
+                                                                   @keydown="if ($event.key === ',') { $event.preventDefault(); addTagFromInput(s, $event); }"
+                                                                   @blur="addTagFromInput(s, $event)"
+                                                                   class="flex-1 min-w-[120px] text-xs bg-transparent text-slate-200 placeholder-slate-500 focus:outline-hidden py-0.5 px-1">
+                                                        </div>
+
+                                                        <!-- Sugestões Rápidas de Tags -->
+                                                        <div class="mt-1.5 flex flex-wrap items-center gap-1 text-[11px] text-slate-400">
+                                                            <span class="text-[10px] text-slate-500 mr-1">Sugestões:</span>
+                                                            <template x-for="sug in getSuggestedTags(s)" :key="sug">
+                                                                <button type="button" @click="addSuggestedTag(s, sug)" class="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-slate-600 text-slate-300 text-[10px] font-mono transition-colors">
+                                                                    + <span x-text="sug"></span>
+                                                                </button>
+                                                            </template>
+                                                        </div>
                                                     </div>
                                                 </div>
 
@@ -500,6 +531,17 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                                                     <label class="block text-[10px] font-semibold text-slate-400 uppercase">Diretriz de Consulta (Guidance para Agentes HorstAI)</label>
                                                     <textarea x-model="s.guidance" rows="2" placeholder="Instruções claras para os agentes..." class="w-full text-xs border border-slate-700 rounded-md p-1.5 bg-slate-900 text-slate-200 focus:border-blue-500"></textarea>
                                                 </div>
+                                            </div>
+                                        </template>
+
+                                        <template x-if="(sourcesMapData.sources || []).length === 0">
+                                            <div class="p-8 text-center border border-dashed border-slate-800 rounded-2xl bg-slate-900/30">
+                                                <i class="fa-solid fa-book-atlas text-2xl text-slate-600 mb-2"></i>
+                                                <h4 class="text-sm font-semibold text-slate-300">Nenhuma Fonte Cadastrada nesta Instância</h4>
+                                                <p class="text-xs text-slate-500 mt-1 max-w-sm mx-auto">Adicione nós operacionais para guiar os agentes HorstAI onde localizar cada documento ou grupo.</p>
+                                                <button @click="addSourceItem()" class="mt-4 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-xs inline-flex items-center gap-1.5">
+                                                    <i class="fa-solid fa-plus"></i> Adicionar Primeira Fonte
+                                                </button>
                                             </div>
                                         </template>
                                     </div>
@@ -769,8 +811,11 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 <div class="flex items-center justify-between pb-2 border-b border-slate-800">
                     <div>
                         <h3 class="text-xs font-bold uppercase tracking-wider text-slate-300">Kits de Conhecimento Reutilizáveis</h3>
-                        <p class="text-xs text-slate-400">Pacotes prontos de instruções e diretrizes para aplicar em qualquer instância.</p>
+                        <p class="text-xs text-slate-400">Pacotes prontos de instruções e diretrizes para guiar os agentes em qualquer instância.</p>
                     </div>
+                    <button @click="openCreateKitModal()" class="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors">
+                        <i class="fa-solid fa-plus"></i> Novo Kit de Conhecimento
+                    </button>
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -806,6 +851,17 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                                     <i class="fa-solid fa-trash-can"></i>
                                 </button>
                             </div>
+                        </div>
+                    </template>
+
+                    <template x-if="filteredKits.length === 0">
+                        <div class="col-span-full p-8 text-center border border-dashed border-slate-800 rounded-2xl bg-slate-900/30">
+                            <i class="fa-solid fa-book-atlas text-2xl text-slate-600 mb-2"></i>
+                            <h4 class="text-sm font-semibold text-slate-300">Nenhum Kit de Conhecimento Cadastrado</h4>
+                            <p class="text-xs text-slate-500 mt-1 max-w-sm mx-auto">Crie kits de fontes e diretrizes operacionais para reutilizar entre instâncias.</p>
+                            <button @click="openCreateKitModal()" class="mt-4 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-xs inline-flex items-center gap-1.5">
+                                <i class="fa-solid fa-plus"></i> Criar Primeiro Kit
+                            </button>
                         </div>
                     </template>
                 </div>
@@ -1595,14 +1651,138 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         </div>
     </div>
 
+    <!-- Modal: Criar Novo Kit de Conhecimento -->
+    <div x-show="showCreateKitModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4" @click.self="showCreateKitModal = false">
+        <div class="bg-slate-900 rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-750 text-slate-100 space-y-4">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-800">
+                <h3 class="text-sm font-bold text-slate-100 flex items-center gap-2">
+                    <i class="fa-solid fa-circle-plus text-blue-400"></i> Criar Novo Kit de Conhecimento
+                </h3>
+                <button type="button" @click="showCreateKitModal = false" class="text-slate-400 hover:text-slate-200"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="space-y-3 max-h-[70vh] overflow-y-auto pr-1">
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Nome do Kit</label>
+                        <input type="text" x-model="createKitForm.name" placeholder="Ex: Kit Operacional Padrão" class="w-full text-xs border border-slate-700 rounded-lg p-2.5 bg-slate-950 text-slate-100 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Categoria</label>
+                        <input type="text" x-model="createKitForm.category" placeholder="Ex: Operações, Compras, Geral" class="w-full text-xs border border-slate-700 rounded-lg p-2.5 bg-slate-950 text-slate-100 focus:border-blue-500">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Descrição</label>
+                    <textarea x-model="createKitForm.description" rows="2" placeholder="Descreva os tipos de dados e diretrizes incluídos neste kit..." class="w-full text-xs border border-slate-700 rounded-lg p-2.5 bg-slate-950 text-slate-100 focus:border-blue-500"></textarea>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Visibilidade</label>
+                    <select x-model="createKitForm.visibility" class="w-full text-xs border border-slate-700 rounded-lg p-2.5 bg-slate-950 text-slate-100 focus:border-blue-500">
+                        <option value="private">Privado</option>
+                        <option value="shared">Compartilhado</option>
+                        <option value="public" x-show="currentUser.role === 'epy_root'">Público (Root)</option>
+                    </select>
+                </div>
+
+                <!-- Fontes cadastradas no Novo Kit -->
+                <div class="pt-2 border-t border-slate-800 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Fontes Operacionais do Kit (<span x-text="(createKitForm.sources || []).length"></span>)</span>
+                            <p class="text-[11px] text-slate-400">Nós operacionais incluídos neste pacote para orientar a IA.</p>
+                        </div>
+                        <button type="button" @click="addCreateKitSource()" class="text-xs text-blue-400 hover:text-blue-300 font-semibold flex items-center gap-1">
+                            <i class="fa-solid fa-plus text-[10px]"></i> Adicionar Fonte
+                        </button>
+                    </div>
+
+                    <div class="space-y-3">
+                        <template x-for="(s, sIdx) in createKitForm.sources" :key="sIdx">
+                            <div class="p-3.5 rounded-xl border border-slate-750 bg-slate-950/70 space-y-2.5 relative">
+                                <button type="button" @click="removeCreateKitSource(sIdx)" class="absolute top-2.5 right-2.5 text-slate-400 hover:text-rose-400 text-xs p-1" title="Remover Fonte">
+                                    <i class="fa-solid fa-xmark"></i>
+                                </button>
+                                
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-2 pr-6">
+                                    <div>
+                                        <label class="block text-[10px] text-slate-400 uppercase font-semibold">ID do Nó</label>
+                                        <input type="text" x-model="s.id" placeholder="ex: horst.compras.wa" class="w-full text-xs font-mono border border-slate-700 rounded p-1.5 bg-slate-900 text-blue-400">
+                                    </div>
+                                    <div>
+                                        <label class="block text-[10px] text-slate-400 uppercase font-semibold">Nome da Fonte</label>
+                                        <input type="text" x-model="s.name" placeholder="ex: Horst - Compras" class="w-full text-xs border border-slate-700 rounded p-1.5 bg-slate-900 text-slate-100">
+                                    </div>
+                                    <div>
+                                        <label class="block text-[10px] text-slate-400 uppercase font-semibold">Propósito (Purpose)</label>
+                                        <input type="text" x-model="s.purpose" placeholder="ex: procurement_tracking" class="w-full text-xs font-mono border border-slate-700 rounded p-1.5 bg-slate-900 text-slate-100">
+                                    </div>
+                                </div>
+
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+                                    <div>
+                                        <label class="block text-[10px] text-slate-400 uppercase font-semibold">Sistema</label>
+                                        <input type="text" x-model="s.system" placeholder="ex: gdrive, periskope" class="w-full text-xs border border-slate-700 rounded p-1.5 bg-slate-900 text-slate-100">
+                                    </div>
+                                    <div>
+                                        <label class="block text-[10px] text-slate-400 uppercase font-semibold">Tipo de Recurso</label>
+                                        <input type="text" x-model="s.resource_type" placeholder="ex: spreadsheet, whatsapp_group" class="w-full text-xs border border-slate-700 rounded p-1.5 bg-slate-900 text-slate-100">
+                                    </div>
+                                    <div>
+                                        <label class="block text-[10px] text-slate-400 uppercase font-semibold">ID Nativo (Opcional)</label>
+                                        <input type="text" x-model="s.native_resource_id" placeholder="ex: ID da Planilha ou JID" class="w-full text-xs font-mono border border-slate-700 rounded p-1.5 bg-slate-900 text-emerald-400">
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <div class="flex items-center justify-between mb-1">
+                                        <label class="block text-[10px] font-semibold text-slate-400 uppercase">Tags de Descoberta</label>
+                                        <span class="text-[10px] text-slate-500">Pressione Enter ou vírgula</span>
+                                    </div>
+                                    <div class="p-1.5 rounded-lg border border-slate-700 bg-slate-900 flex flex-wrap items-center gap-1 min-h-[36px]">
+                                        <template x-for="(tag, tIdx) in (s.tags || [])" :key="tIdx">
+                                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-950 border border-blue-800 text-blue-300 text-[11px] font-mono">
+                                                <span x-text="tag"></span>
+                                                <button type="button" @click.stop="removeTag(s, tIdx)" class="text-blue-400 hover:text-rose-400 ml-0.5"><i class="fa-solid fa-xmark text-[9px]"></i></button>
+                                            </span>
+                                        </template>
+                                        <input type="text" placeholder="+ Tag..." @keydown.enter.prevent="addTagFromInput(s, $event)" @keydown="if ($event.key === ',') { $event.preventDefault(); addTagFromInput(s, $event); }" @blur="addTagFromInput(s, $event)" class="flex-1 min-w-[100px] text-xs bg-transparent text-slate-200 placeholder-slate-500 focus:outline-hidden py-0.5 px-1">
+                                    </div>
+                                    <div class="mt-1 flex flex-wrap items-center gap-1 text-[10px] text-slate-400">
+                                        <span class="text-slate-500">Sugestões:</span>
+                                        <template x-for="sug in getSuggestedTags(s)" :key="sug">
+                                            <button type="button" @click="addSuggestedTag(s, sug)" class="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-mono text-[10px]">+ <span x-text="sug"></span></button>
+                                        </template>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label class="block text-[10px] text-slate-400 uppercase font-semibold">Diretriz de Consulta (Guidance)</label>
+                                    <input type="text" x-model="s.guidance" placeholder="Oriente o agente sobre quando e como consultar esta fonte..." class="w-full text-xs border border-slate-700 rounded p-1.5 bg-slate-900 text-slate-100">
+                                </div>
+                            </div>
+                        </template>
+
+                        <template x-if="(createKitForm.sources || []).length === 0">
+                            <p class="text-xs text-slate-500 italic p-3 text-center border border-dashed border-slate-800 rounded-lg">Nenhuma fonte adicionada ainda. Clique em "+ Adicionar Fonte" acima.</p>
+                        </template>
+                    </div>
+                </div>
+            </div>
+            <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
+                <button type="button" @click="showCreateKitModal = false" class="px-4 py-2 text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg">Cancelar</button>
+                <button type="button" @click="createKitSubmit()" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-xs">Criar Kit</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal: Editar Kit de Conhecimento -->
     <div x-show="showEditKitModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4" @click.self="showEditKitModal = false">
-        <div class="bg-slate-900 rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-750 text-slate-100 space-y-4">
+        <div class="bg-slate-900 rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-750 text-slate-100 space-y-4">
             <div class="flex items-center justify-between pb-2 border-b border-slate-800">
                 <h3 class="text-sm font-bold text-slate-100 flex items-center gap-2">
                     <i class="fa-solid fa-book-atlas text-blue-400"></i> Editar Kit de Conhecimento
                 </h3>
-                <button @click="showEditKitModal = false" class="text-slate-400 hover:text-slate-200"><i class="fa-solid fa-xmark"></i></button>
+                <button type="button" @click="showEditKitModal = false" class="text-slate-400 hover:text-slate-200"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <div class="space-y-3 max-h-[70vh] overflow-y-auto pr-1">
                 <div class="grid grid-cols-2 gap-3">
@@ -1629,40 +1809,82 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 </div>
 
                 <!-- Fontes cadastradas no Kit -->
-                <div class="pt-2 border-t border-slate-800 space-y-2">
+                <div class="pt-2 border-t border-slate-800 space-y-3">
                     <div class="flex items-center justify-between">
-                        <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Fontes de Dados do Kit</span>
-                        <button @click="addEditKitSource()" class="text-xs text-blue-400 hover:text-blue-300 font-semibold flex items-center gap-1">
+                        <div>
+                            <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Fontes Operacionais do Kit (<span x-text="(editKitForm.sources || []).length"></span>)</span>
+                            <p class="text-[11px] text-slate-400">Nós operacionais incluídos neste kit.</p>
+                        </div>
+                        <button type="button" @click="addEditKitSource()" class="text-xs text-blue-400 hover:text-blue-300 font-semibold flex items-center gap-1">
                             <i class="fa-solid fa-plus text-[10px]"></i> Adicionar Fonte
                         </button>
                     </div>
-                    <div class="space-y-2">
+                    <div class="space-y-3">
                         <template x-for="(s, sIdx) in editKitForm.sources" :key="sIdx">
-                            <div class="p-3 rounded-xl border border-slate-750 bg-slate-950/60 space-y-2 relative">
-                                <button @click="removeEditKitSource(sIdx)" class="absolute top-2.5 right-2.5 text-slate-500 hover:text-rose-400 text-xs">
+                            <div class="p-3.5 rounded-xl border border-slate-750 bg-slate-950/70 space-y-2.5 relative">
+                                <button type="button" @click="removeEditKitSource(sIdx)" class="absolute top-2.5 right-2.5 text-slate-400 hover:text-rose-400 text-xs p-1" title="Remover Fonte">
                                     <i class="fa-solid fa-xmark"></i>
                                 </button>
-                                <div class="grid grid-cols-2 gap-2 pr-6">
+                                
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-2 pr-6">
                                     <div>
-                                        <label class="block text-[10px] text-slate-400">Nome</label>
-                                        <input type="text" x-model="s.name" class="w-full text-xs border border-slate-700 rounded p-1.5 bg-slate-950 text-slate-100">
+                                        <label class="block text-[10px] text-slate-400 uppercase font-semibold">ID do Nó</label>
+                                        <input type="text" x-model="s.id" placeholder="ex: horst.compras.wa" class="w-full text-xs font-mono border border-slate-700 rounded p-1.5 bg-slate-900 text-blue-400">
                                     </div>
                                     <div>
-                                        <label class="block text-[10px] text-slate-400">Tipo</label>
-                                        <select x-model="s.type" class="w-full text-xs border border-slate-700 rounded p-1.5 bg-slate-950 text-slate-100">
-                                            <option value="database">Banco de Dados</option>
-                                            <option value="api">API / Swagger</option>
-                                            <option value="drive">Drive / Cloud</option>
-                                            <option value="doc">Documento / Wiki</option>
-                                        </select>
+                                        <label class="block text-[10px] text-slate-400 uppercase font-semibold">Nome da Fonte</label>
+                                        <input type="text" x-model="s.name" placeholder="ex: Horst - Compras" class="w-full text-xs border border-slate-700 rounded p-1.5 bg-slate-900 text-slate-100">
+                                    </div>
+                                    <div>
+                                        <label class="block text-[10px] text-slate-400 uppercase font-semibold">Propósito (Purpose)</label>
+                                        <input type="text" x-model="s.purpose" placeholder="ex: procurement_tracking" class="w-full text-xs font-mono border border-slate-700 rounded p-1.5 bg-slate-900 text-slate-100">
                                     </div>
                                 </div>
+
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+                                    <div>
+                                        <label class="block text-[10px] text-slate-400 uppercase font-semibold">Sistema</label>
+                                        <input type="text" x-model="s.system" placeholder="ex: gdrive, periskope" class="w-full text-xs border border-slate-700 rounded p-1.5 bg-slate-900 text-slate-100">
+                                    </div>
+                                    <div>
+                                        <label class="block text-[10px] text-slate-400 uppercase font-semibold">Tipo de Recurso</label>
+                                        <input type="text" x-model="s.resource_type" placeholder="ex: spreadsheet, whatsapp_group" class="w-full text-xs border border-slate-700 rounded p-1.5 bg-slate-900 text-slate-100">
+                                    </div>
+                                    <div>
+                                        <label class="block text-[10px] text-slate-400 uppercase font-semibold">ID Nativo (Opcional)</label>
+                                        <input type="text" x-model="s.native_resource_id" placeholder="ex: ID da Planilha ou JID" class="w-full text-xs font-mono border border-slate-700 rounded p-1.5 bg-slate-900 text-emerald-400">
+                                    </div>
+                                </div>
+
                                 <div>
-                                    <label class="block text-[10px] text-slate-400">Descrição / Diretriz para o Agente</label>
-                                    <input type="text" x-model="s.description" class="w-full text-xs border border-slate-700 rounded p-1.5 bg-slate-950 text-slate-100">
+                                    <div class="flex items-center justify-between mb-1">
+                                        <label class="block text-[10px] font-semibold text-slate-400 uppercase">Tags de Descoberta</label>
+                                        <span class="text-[10px] text-slate-500">Pressione Enter ou vírgula</span>
+                                    </div>
+                                    <div class="p-1.5 rounded-lg border border-slate-700 bg-slate-900 flex flex-wrap items-center gap-1 min-h-[36px]">
+                                        <template x-for="(tag, tIdx) in (s.tags || [])" :key="tIdx">
+                                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-950 border border-blue-800 text-blue-300 text-[11px] font-mono">
+                                                <span x-text="tag"></span>
+                                                <button type="button" @click.stop="removeTag(s, tIdx)" class="text-blue-400 hover:text-rose-400 ml-0.5"><i class="fa-solid fa-xmark text-[9px]"></i></button>
+                                            </span>
+                                        </template>
+                                        <input type="text" placeholder="+ Tag..." @keydown.enter.prevent="addTagFromInput(s, $event)" @keydown="if ($event.key === ',') { $event.preventDefault(); addTagFromInput(s, $event); }" @blur="addTagFromInput(s, $event)" class="flex-1 min-w-[100px] text-xs bg-transparent text-slate-200 placeholder-slate-500 focus:outline-hidden py-0.5 px-1">
+                                    </div>
+                                    <div class="mt-1 flex flex-wrap items-center gap-1 text-[10px] text-slate-400">
+                                        <span class="text-slate-500">Sugestões:</span>
+                                        <template x-for="sug in getSuggestedTags(s)" :key="sug">
+                                            <button type="button" @click="addSuggestedTag(s, sug)" class="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-mono text-[10px]">+ <span x-text="sug"></span></button>
+                                        </template>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label class="block text-[10px] text-slate-400 uppercase font-semibold">Diretriz de Consulta (Guidance)</label>
+                                    <input type="text" x-model="s.guidance" placeholder="Oriente o agente sobre quando e como consultar esta fonte..." class="w-full text-xs border border-slate-700 rounded p-1.5 bg-slate-900 text-slate-100">
                                 </div>
                             </div>
                         </template>
+
                         <template x-if="(editKitForm.sources || []).length === 0">
                             <p class="text-xs text-slate-500 italic p-3 text-center border border-dashed border-slate-800 rounded-lg">Nenhuma fonte cadastrada neste kit.</p>
                         </template>
@@ -1670,8 +1892,8 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 </div>
             </div>
             <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
-                <button @click="showEditKitModal = false" class="px-4 py-2 text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg">Cancelar</button>
-                <button @click="saveEditedKit()" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-xs">Salvar Alterações</button>
+                <button type="button" @click="showEditKitModal = false" class="px-4 py-2 text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg">Cancelar</button>
+                <button type="button" @click="saveEditedKit()" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-xs">Salvar Alterações</button>
             </div>
         </div>
     </div>
@@ -1914,6 +2136,8 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 showTemplateModal: false,
                 showSaveAsTemplateModal: false,
                 showSaveAsKitModal: false,
+                showCreateKitModal: false,
+                createKitForm: { name: '', category: 'Operações', description: '', visibility: 'shared', sources: [] },
                 showConfirmModal: false,
                 showInstantiateModal: false,
                 showEditConnectionModal: false,
@@ -2605,13 +2829,18 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 },
 
                 addSourceItem() {
-                    if (!this.sourcesMapData.sources) this.sourcesMapData.sources = [];
+                    if (!this.sourcesMapData) {
+                        this.sourcesMapData = { organization: (this.currentInstanceDetail ? this.currentInstanceDetail.name : 'Horst Group'), sources: [] };
+                    }
+                    if (!Array.isArray(this.sourcesMapData.sources)) {
+                        this.sourcesMapData.sources = [];
+                    }
                     const ts = Date.now();
-                    this.sourcesMapData.sources.push({
+                    const newSource = {
                         id: `source.node_${ts}`,
                         name: 'Nova Fonte Operacional',
                         purpose: 'general_operations',
-                        tags: ['operations'],
+                        tags: ['operations', 'official'],
                         system: 'gdrive',
                         authority: 'official',
                         status: 'active',
@@ -2620,11 +2849,76 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                         content_types: ['documentos'],
                         primary_tools: [],
                         guidance: 'Consulte esta fonte para obter informações sobre...'
-                    });
+                    };
+                    this.sourcesMapData = {
+                        ...this.sourcesMapData,
+                        sources: [...this.sourcesMapData.sources, newSource]
+                    };
+                    this.showToast('Nova fonte adicionada ao mapa! Edite os detalhes e salve.', 'info');
                 },
 
                 removeSourceItem(index) {
-                    this.sourcesMapData.sources.splice(index, 1);
+                    if (!this.sourcesMapData || !this.sourcesMapData.sources) return;
+                    this.sourcesMapData = {
+                        ...this.sourcesMapData,
+                        sources: this.sourcesMapData.sources.filter((_, i) => i !== index)
+                    };
+                },
+
+                addTagFromInput(source, event) {
+                    const raw = (event.target.value || '').trim();
+                    if (!raw) return;
+                    const parts = raw.split(/[ ,;]+/).map(p => p.toLowerCase().trim()).filter(Boolean);
+                    if (!source.tags) source.tags = [];
+                    for (const p of parts) {
+                        const clean = p.replace(/[^a-z0-9_.-]/g, '');
+                        if (clean && !source.tags.includes(clean)) {
+                            source.tags.push(clean);
+                        }
+                    }
+                    event.target.value = '';
+                },
+
+                removeTag(source, index) {
+                    if (source && source.tags && source.tags.length > index) {
+                        source.tags.splice(index, 1);
+                    }
+                },
+
+                addSuggestedTag(source, tag) {
+                    if (!source) return;
+                    if (!source.tags) source.tags = [];
+                    const clean = (tag || '').toLowerCase().trim();
+                    if (clean && !source.tags.includes(clean)) {
+                        source.tags.push(clean);
+                    }
+                },
+
+                getSuggestedTags(source) {
+                    if (!source) return [];
+                    const existing = new Set((source.tags || []).map(t => (t || '').toLowerCase()));
+                    const suggestions = [];
+                    if (source.system) {
+                        const sys = source.system.toLowerCase().trim();
+                        if (sys && !existing.has(sys)) suggestions.push(sys);
+                    }
+                    if (source.resource_type) {
+                        const rt = source.resource_type.toLowerCase().trim();
+                        if (rt && !existing.has(rt)) suggestions.push(rt);
+                    }
+                    if (source.purpose) {
+                        const purpParts = source.purpose.toLowerCase().split(/[ _-]+/).filter(Boolean);
+                        for (const pp of purpParts) {
+                            if (!existing.has(pp) && pp.length > 2) suggestions.push(pp);
+                        }
+                    }
+                    const common = ['official', 'compras', 'operacoes', 'whatsapp', 'planilha', 'ssot', 'vault'];
+                    for (const c of common) {
+                        if (!existing.has(c) && !suggestions.includes(c)) {
+                            suggestions.push(c);
+                        }
+                    }
+                    return suggestions.slice(0, 6);
                 },
 
                 async saveStudioSourcesMap() {
@@ -3186,6 +3480,66 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     this.showConfirmModal = true;
                 },
 
+                openCreateKitModal() {
+                    this.createKitForm = {
+                        name: '',
+                        category: 'Operações',
+                        description: '',
+                        visibility: 'shared',
+                        sources: []
+                    };
+                    this.showCreateKitModal = true;
+                },
+
+                addCreateKitSource() {
+                    if (!this.createKitForm.sources) this.createKitForm.sources = [];
+                    const ts = Date.now();
+                    this.createKitForm.sources = [
+                        ...this.createKitForm.sources,
+                        {
+                            id: `kit.node_${ts}`,
+                            name: 'Nova Fonte do Kit',
+                            purpose: 'general_operations',
+                            tags: ['operations'],
+                            system: 'gdrive',
+                            authority: 'official',
+                            status: 'active',
+                            resource_type: 'spreadsheet',
+                            native_resource_id: '',
+                            guidance: 'Diretriz de consulta desta fonte...'
+                        }
+                    ];
+                },
+
+                removeCreateKitSource(index) {
+                    if (!this.createKitForm || !this.createKitForm.sources) return;
+                    this.createKitForm.sources = this.createKitForm.sources.filter((_, i) => i !== index);
+                },
+
+                async createKitSubmit() {
+                    if (!this.createKitForm.name.trim()) {
+                        this.showToast('Informe o nome do Kit de Conhecimento.', 'error');
+                        return;
+                    }
+                    try {
+                        const res = await this.apiFetch('/api/v1/data-source-kits', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(this.createKitForm)
+                        });
+                        if (res && res.ok) {
+                            this.showCreateKitModal = false;
+                            this.showToast('Kit de Conhecimento criado com sucesso!', 'success');
+                            await this.fetchDataSourceKits();
+                        } else {
+                            const err = await res.json();
+                            this.showToast(err.detail || 'Erro ao criar kit.', 'error');
+                        }
+                    } catch (e) {
+                        this.showToast('Erro ao criar kit: ' + e.message, 'error');
+                    }
+                },
+
                 openEditKitModal(k) {
                     this.editKitForm = {
                         id: k.id,
@@ -3200,11 +3554,27 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
                 addEditKitSource() {
                     if (!this.editKitForm.sources) this.editKitForm.sources = [];
-                    this.editKitForm.sources.push({ name: 'Nova Fonte', type: 'database', description: '', uri: '' });
+                    const ts = Date.now();
+                    this.editKitForm.sources = [
+                        ...this.editKitForm.sources,
+                        {
+                            id: `kit.node_${ts}`,
+                            name: 'Nova Fonte do Kit',
+                            purpose: 'general_operations',
+                            tags: ['operations'],
+                            system: 'gdrive',
+                            authority: 'official',
+                            status: 'active',
+                            resource_type: 'spreadsheet',
+                            native_resource_id: '',
+                            guidance: 'Diretriz de consulta desta fonte...'
+                        }
+                    ];
                 },
 
                 removeEditKitSource(index) {
-                    this.editKitForm.sources.splice(index, 1);
+                    if (!this.editKitForm || !this.editKitForm.sources) return;
+                    this.editKitForm.sources = this.editKitForm.sources.filter((_, i) => i !== index);
                 },
 
                 async saveEditedKit() {

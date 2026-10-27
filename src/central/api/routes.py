@@ -1530,6 +1530,26 @@ def delete_data_source_kit(
     return {"status": "success", "message": "Kit excluído com sucesso."}
 
 
+class KitApplyRequest(BaseModel):
+    target_instance_slug: str
+
+
+@api_router.post("/data-source-kits/{kit_id}/apply")
+async def apply_kit_to_instance_by_body(
+    kit_id: str,
+    data: KitApplyRequest,
+    db: Session = Depends(get_db),
+    current_user: UserEntity = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Aplica as fontes e diretrizes de um Kit à instância especificada no corpo JSON."""
+    return await apply_kit_to_instance(
+        kit_id=kit_id,
+        slug=data.target_instance_slug,
+        db=db,
+        current_user=current_user,
+    )
+
+
 @api_router.post("/data-source-kits/{kit_id}/apply-to-instance/{slug}")
 async def apply_kit_to_instance(
     kit_id: str,
@@ -1548,14 +1568,23 @@ async def apply_kit_to_instance(
 
     # Mescla as fontes do Kit mantendo a organização da instância
     current_map = instance.data_sources_map or {"organization": instance.name, "sources": []}
-    existing_sources = current_map.get("sources", [])
+    existing_sources = list(current_map.get("sources", []))
 
-    # Adiciona fontes do kit sem duplicar sistemas idênticos
-    existing_systems = {s.get("system") for s in existing_sources}
+    # Adiciona ou atualiza fontes do kit com base no ID estável (permitindo múltiplos nós do mesmo sistema)
+    existing_ids = {s.get("id") for s in existing_sources if isinstance(s, dict) and s.get("id")}
     for src in kit.sources:
-        if src.get("system") not in existing_systems:
+        if not isinstance(src, dict):
+            continue
+        src_id = src.get("id")
+        if not src_id or src_id not in existing_ids:
             existing_sources.append(src)
-            existing_systems.add(src.get("system"))
+            if src_id:
+                existing_ids.add(src_id)
+        else:
+            for idx, es in enumerate(existing_sources):
+                if isinstance(es, dict) and es.get("id") == src_id:
+                    existing_sources[idx] = src
+                    break
 
     current_map["sources"] = existing_sources
     CentralRepository.update_instance_data_sources_map(db, slug, current_map)
