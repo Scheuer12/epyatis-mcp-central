@@ -44,9 +44,11 @@ try {
                     $staleConns = Get-NetTCPConnection -LocalPort 8000 -ErrorAction SilentlyContinue
                     if ($staleConns) {
                         foreach ($conn in $staleConns) {
-                            try {
-                                Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue
-                            } catch {}
+                            if ($conn.OwningProcess -and $conn.OwningProcess -gt 4 -and $conn.OwningProcess -ne $PID) {
+                                try {
+                                    Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue
+                                } catch {}
+                            }
                         }
                         Start-Sleep -Seconds 1
                     }
