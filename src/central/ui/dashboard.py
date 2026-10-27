@@ -170,9 +170,17 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     </button>
                 </template>
                 <template x-if="activeTab === 'connections'">
-                    <button @click="showTemplateModal = true" class="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors">
-                        <i class="fa-solid fa-plus"></i> Conectar Serviço (Receita)
-                    </button>
+                    <div class="flex items-center gap-2">
+                        <button @click="openCreateConnectionModal()" class="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors" title="Criar conexão direta sem modelo">
+                            <i class="fa-solid fa-plus"></i> Nova Conexão Manual
+                        </button>
+                        <button @click="openCreateTemplateModal()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors" title="Criar novo modelo do zero">
+                            <i class="fa-solid fa-wand-magic-sparkles text-blue-400"></i> Novo Modelo
+                        </button>
+                        <button @click="showTemplateModal = true" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors" title="Conectar usando catálogo de receitas">
+                            <i class="fa-solid fa-bolt text-amber-400"></i> Usar Receita
+                        </button>
+                    </div>
                 </template>
                 <template x-if="activeTab === 'kits'">
                     <button @click="openCreateKitModal()" class="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors">
@@ -352,8 +360,11 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                                                     Vincular
                                                 </button>
                                             </div>
-                                            <button @click="openTemplateModalWithTarget(currentInstanceDetail.slug)" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold transition-colors flex items-center gap-1">
-                                                <i class="fa-solid fa-plus text-[10px]"></i> Conectar Novo Serviço
+                                            <button @click="openCreateConnectionModal(currentInstanceDetail.slug)" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 shadow-xs" title="Criar nova conexão manual do zero e vincular diretamente a esta instância">
+                                                <i class="fa-solid fa-plus text-[10px]"></i> Criar Conexão Manual
+                                            </button>
+                                            <button @click="openTemplateModalWithTarget(currentInstanceDetail.slug)" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-700 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1" title="Conectar usando catálogo de receitas pré-configuradas">
+                                                <i class="fa-solid fa-wand-magic-sparkles text-blue-400 text-[10px]"></i> Usar Receita
                                             </button>
                                         </div>
                                     </div>
@@ -572,6 +583,21 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
                 <!-- Sub-Aba: Conexões Ativas -->
                 <div x-show="vaultSubTab === 'active'" class="space-y-4">
+                    <div class="flex items-center justify-between pb-1">
+                        <div>
+                            <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Conexões Configuradas no Cofre</span>
+                            <span class="text-xs text-slate-500 block">Conexões ativas e compartilháveis prontas para acoplamento a qualquer instância</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button @click="openCreateConnectionModal()" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors" title="Criar conexão direta sem modelo pré-existente">
+                                <i class="fa-solid fa-plus"></i> Nova Conexão Manual
+                            </button>
+                            <button @click="showTemplateModal = true" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors" title="Conectar usando receitas prontas">
+                                <i class="fa-solid fa-bolt text-amber-400"></i> Usar Receita
+                            </button>
+                        </div>
+                    </div>
+
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         <template x-for="c in filteredConnections" :key="c.id">
                             <div class="bg-slate-900 p-5 rounded-xl border border-slate-750 hover:border-slate-600 shadow-sm shadow-black/20 flex flex-col justify-between transition-all">
@@ -646,9 +672,14 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
                 <!-- Sub-Aba: Receitas de Conexão (Templates) -->
                 <div x-show="vaultSubTab === 'templates'" class="space-y-4">
-                    <div class="flex items-center justify-between">
-                        <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Catálogo de Receitas Pré-Configuradas</span>
-                        <span class="text-xs text-slate-500">Clique para conectar em 1 clique</span>
+                    <div class="flex items-center justify-between pb-1">
+                        <div>
+                            <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Catálogo de Modelos & Receitas</span>
+                            <span class="text-xs text-slate-500 block">Modelos reutilizáveis pré-configurados para conectar serviços com 1 clique ou criar novos modelos</span>
+                        </div>
+                        <button @click="openCreateTemplateModal()" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors" title="Criar novo modelo reutilizável do zero">
+                            <i class="fa-solid fa-plus"></i> Novo Modelo do Zero
+                        </button>
                     </div>
 
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1629,9 +1660,200 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             </div>
         </div>
     </div>
+
+    <!-- Modal: Criar Nova Conexão Manual -->
+    <div x-show="showCreateConnectionModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4" @click.self="showCreateConnectionModal = false">
+        <div class="bg-slate-900 rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-750 text-slate-100 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-800">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-lg bg-blue-950/60 text-blue-400 border border-blue-800/50 flex items-center justify-center text-sm font-bold shrink-0">
+                        <i class="fa-solid fa-plus"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-bold text-slate-100">Nova Conexão Manual</h3>
+                        <p class="text-[11px] text-slate-400">Configure uma conexão direta escolhendo o método e parâmetros do zero.</p>
+                    </div>
+                </div>
+                <button @click="showCreateConnectionModal = false" class="text-slate-400 hover:text-slate-200"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <div class="space-y-3">
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">ID Único da Conexão *</label>
+                        <input type="text" x-model="newConnectionForm.id" placeholder="ex: postgres-db" class="w-full text-xs border border-slate-700 rounded-lg p-2.5 font-mono bg-slate-950 text-slate-100 placeholder-slate-600 focus:border-blue-500">
+                        <span class="text-[10px] text-slate-500 mt-0.5 block">Identificador permanente no cofre</span>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Prefixo das Tools *</label>
+                        <input type="text" x-model="newConnectionForm.prefix" placeholder="ex: db" class="w-full text-xs border border-slate-700 rounded-lg p-2.5 font-mono bg-slate-950 text-slate-100 placeholder-slate-600 focus:border-blue-500">
+                        <span class="text-[10px] text-slate-500 mt-0.5 block">Namespace: <span class="font-mono text-blue-400" x-text="(newConnectionForm.prefix || 'prefix') + '__*'"></span></span>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Nome Amigável *</label>
+                    <input type="text" x-model="newConnectionForm.name" placeholder="Ex: PostgreSQL Principal" class="w-full text-xs border border-slate-700 rounded-lg p-2.5 bg-slate-950 text-slate-100 placeholder-slate-600 focus:border-blue-500">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Método de Conexão *</label>
+                        <select x-model="newConnectionForm.type" class="w-full text-xs border border-slate-700 rounded-lg p-2.5 bg-slate-950 text-slate-100 focus:border-blue-500">
+                            <option value="stdio">stdio (Executável CLI Local)</option>
+                            <option value="remote_mcp">remote_mcp (Endpoint SSE)</option>
+                            <option value="openapi">openapi (API REST / OpenAPI)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Visibilidade Inicial *</label>
+                        <select x-model="newConnectionForm.visibility" class="w-full text-xs border border-slate-700 rounded-lg p-2.5 bg-slate-950 text-slate-100 focus:border-blue-500">
+                            <option value="shared">Compartilhado (Equipe)</option>
+                            <option value="private">Privado (Apenas Você)</option>
+                            <option value="public" x-show="currentUser.role === 'epy_root'">Público (Todos - Root)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Vincular Opcionalmente à Instância -->
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Vincular Imediatamente à Instância (Opcional)</label>
+                    <select x-model="newConnectionForm.targetInstanceSlug" class="w-full text-xs border border-slate-700 rounded-lg p-2.5 bg-slate-950 text-slate-100 focus:border-blue-500">
+                        <option value="">Apenas guardar no cofre (sem vincular)</option>
+                        <template x-for="inst in instances" :key="inst.slug">
+                            <option :value="inst.slug" x-text="inst.name + ' (' + inst.slug + ')'"></option>
+                        </template>
+                    </select>
+                </div>
+
+                <!-- Campos específicos para STDIO -->
+                <template x-if="newConnectionForm.type === 'stdio'">
+                    <div class="space-y-3 p-3.5 bg-slate-950/60 rounded-xl border border-slate-800">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[11px] font-bold text-slate-300 uppercase tracking-wider"><i class="fa-solid fa-terminal text-blue-400 mr-1"></i> Configuração Stdio</span>
+                            <span class="text-[10px] text-slate-500">Homologados: npx, python, uv, uvx, node</span>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-300 mb-1">Comando Executável *</label>
+                            <input type="text" x-model="newConnectionForm.command" placeholder="Ex: npx, python, uvx" class="w-full text-xs border border-slate-700 rounded-lg p-2 font-mono bg-slate-900 text-slate-100 placeholder-slate-600 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-300 mb-1">Argumentos (separados por espaço ou array JSON)</label>
+                            <input type="text" x-model="newConnectionForm.argsText" placeholder="Ex: -y @modelcontextprotocol/server-postgres postgresql://..." class="w-full text-xs border border-slate-700 rounded-lg p-2 font-mono bg-slate-900 text-slate-100 placeholder-slate-600 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-300 mb-1">Variáveis de Ambiente (JSON)</label>
+                            <textarea x-model="newConnectionForm.envText" rows="2" placeholder='{"API_KEY": "..."}' class="w-full text-xs border border-slate-700 rounded-lg p-2 font-mono bg-slate-900 text-slate-100 placeholder-slate-600 focus:border-blue-500"></textarea>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- Campos específicos para REMOTE_MCP e OPENAPI -->
+                <template x-if="newConnectionForm.type === 'remote_mcp' || newConnectionForm.type === 'openapi'">
+                    <div class="space-y-3 p-3.5 bg-slate-950/60 rounded-xl border border-slate-800">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[11px] font-bold text-slate-300 uppercase tracking-wider"><i class="fa-solid fa-network-wired text-blue-400 mr-1"></i> Endpoint Remoto</span>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-300 mb-1">URL do Serviço *</label>
+                            <input type="text" x-model="newConnectionForm.url" placeholder="https://api.exemplo.com/mcp" class="w-full text-xs border border-slate-700 rounded-lg p-2 font-mono bg-slate-900 text-slate-100 placeholder-slate-600 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-300 mb-1">Headers & Autenticação (JSON)</label>
+                            <textarea x-model="newConnectionForm.authConfigText" rows="2" placeholder='{"Authorization": "Bearer token"}' class="w-full text-xs border border-slate-700 rounded-lg p-2 font-mono bg-slate-900 text-slate-100 placeholder-slate-600 focus:border-blue-500"></textarea>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
+                <button @click="showCreateConnectionModal = false" class="px-4 py-2 text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition-colors">Cancelar</button>
+                <button @click="submitCreateConnection()" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors flex items-center gap-1.5">
+                    <i class="fa-solid fa-check text-[11px]"></i> Salvar Conexão
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Criar Novo Modelo de Conexão do Zero -->
+    <div x-show="showCreateTemplateModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4" @click.self="showCreateTemplateModal = false">
+        <div class="bg-slate-900 rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-750 text-slate-100 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-800">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-lg bg-blue-950/60 text-blue-400 border border-blue-800/50 flex items-center justify-center text-sm font-bold shrink-0">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-bold text-slate-100">Novo Modelo de Conexão (Receita)</h3>
+                        <p class="text-[11px] text-slate-400">Defina um modelo reutilizável para conectar novos serviços em 1 clique.</p>
+                    </div>
+                </div>
+                <button @click="showCreateTemplateModal = false" class="text-slate-400 hover:text-slate-200"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Nome do Modelo *</label>
+                    <input type="text" x-model="newTemplateForm.name" placeholder="Ex: PostgreSQL Database Connector" class="w-full text-xs border border-slate-700 rounded-lg p-2.5 bg-slate-950 text-slate-100 placeholder-slate-600 focus:border-blue-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Descrição</label>
+                    <textarea x-model="newTemplateForm.description" rows="2" placeholder="Descreva para sua equipe a finalidade deste conector..." class="w-full text-xs border border-slate-700 rounded-lg p-2.5 bg-slate-950 text-slate-100 placeholder-slate-600 focus:border-blue-500"></textarea>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Prefixo Sugerido *</label>
+                        <input type="text" x-model="newTemplateForm.prefix" placeholder="Ex: pg, github" class="w-full text-xs border border-slate-700 rounded-lg p-2.5 font-mono bg-slate-950 text-slate-100 placeholder-slate-600 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Método de Conexão *</label>
+                        <select x-model="newTemplateForm.type" class="w-full text-xs border border-slate-700 rounded-lg p-2.5 bg-slate-950 text-slate-100 focus:border-blue-500">
+                            <option value="stdio">stdio (Executável CLI)</option>
+                            <option value="remote_mcp">remote_mcp (Endpoint SSE)</option>
+                            <option value="openapi">openapi (API REST)</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Visibilidade do Modelo *</label>
+                    <select x-model="newTemplateForm.visibility" class="w-full text-xs border border-slate-700 rounded-lg p-2.5 bg-slate-950 text-slate-100 focus:border-blue-500">
+                        <option value="shared">Compartilhado (Equipe)</option>
+                        <option value="private">Privado (Apenas Você)</option>
+                        <option value="public" x-show="currentUser.role === 'epy_root'">Público (Todos - Root)</option>
+                    </select>
+                </div>
+
+                <div class="p-3.5 bg-slate-950/60 rounded-xl border border-slate-800 space-y-3">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Comando Padrão (para stdio)</label>
+                        <input type="text" x-model="newTemplateForm.command" placeholder="Ex: npx, python, uvx" class="w-full text-xs border border-slate-700 rounded-lg p-2 font-mono bg-slate-900 text-slate-100 placeholder-slate-600 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Argumentos Padrão</label>
+                        <input type="text" x-model="newTemplateForm.argsText" placeholder="Ex: -y @modelcontextprotocol/server-postgres" class="w-full text-xs border border-slate-700 rounded-lg p-2 font-mono bg-slate-900 text-slate-100 placeholder-slate-600 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Variáveis de Ambiente Padrão (JSON)</label>
+                        <textarea x-model="newTemplateForm.envText" rows="2" placeholder='{"DATABASE_URL": "postgresql://..."}' class="w-full text-xs border border-slate-700 rounded-lg p-2 font-mono bg-slate-900 text-slate-100 placeholder-slate-600 focus:border-blue-500"></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
+                <button @click="showCreateTemplateModal = false" class="px-4 py-2 text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition-colors">Cancelar</button>
+                <button @click="submitCreateTemplate()" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors flex items-center gap-1.5">
+                    <i class="fa-solid fa-wand-magic-sparkles text-[11px]"></i> Salvar Modelo
+                </button>
+            </div>
+        </div>
+    </div>
     <script>
         function centralApp() {
             return {
+                showCreateConnectionModal: false,
+                newConnectionForm: { id: '', name: '', prefix: '', type: 'stdio', command: '', argsText: '', envText: '{}', url: '', authConfigText: '{}', visibility: 'shared', targetInstanceSlug: '' },
+                showCreateTemplateModal: false,
+                newTemplateForm: { name: '', description: '', prefix: '', type: 'stdio', command: '', argsText: '', envText: '{}', authConfigText: '{}', visibility: 'shared' },
                 activeTab: 'instances',
                 studioTab: 'connections',
                 vaultSubTab: 'active',
@@ -2487,6 +2709,174 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                         }
                     } catch (e) {
                         this.showToast('Falha ao conectar serviço.', 'error');
+                    }
+                },
+
+                openCreateConnectionModal(targetSlug = '') {
+                    this.newConnectionForm = {
+                        id: '',
+                        name: '',
+                        prefix: '',
+                        type: 'stdio',
+                        command: '',
+                        argsText: '',
+                        envText: '{}',
+                        url: '',
+                        authConfigText: '{}',
+                        visibility: 'shared',
+                        targetInstanceSlug: targetSlug || (this.selectedInstanceSlug || '')
+                    };
+                    this.showCreateConnectionModal = true;
+                },
+
+                async submitCreateConnection() {
+                    if (!this.newConnectionForm.id || !this.newConnectionForm.name || !this.newConnectionForm.prefix) {
+                        this.showToast('Preencha os campos obrigatórios (ID, Nome e Prefixo).', 'error');
+                        return;
+                    }
+                    const cleanId = this.newConnectionForm.id.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+                    if (!cleanId) {
+                        this.showToast('ID da conexão inválido.', 'error');
+                        return;
+                    }
+
+                    try {
+                        let parsedArgs = [];
+                        const trimmedArgs = (this.newConnectionForm.argsText || '').trim();
+                        if (trimmedArgs.startsWith('[')) {
+                            parsedArgs = JSON.parse(trimmedArgs);
+                        } else if (trimmedArgs) {
+                            parsedArgs = trimmedArgs.split(/\\s+/);
+                        }
+
+                        let parsedEnv = {};
+                        if ((this.newConnectionForm.envText || '').trim()) {
+                            parsedEnv = JSON.parse(this.newConnectionForm.envText);
+                        }
+
+                        let parsedAuth = {};
+                        if ((this.newConnectionForm.authConfigText || '').trim()) {
+                            parsedAuth = JSON.parse(this.newConnectionForm.authConfigText);
+                        }
+
+                        const payload = {
+                            id: cleanId,
+                            name: this.newConnectionForm.name.trim(),
+                            prefix: this.newConnectionForm.prefix.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_'),
+                            type: this.newConnectionForm.type,
+                            command: this.newConnectionForm.command ? this.newConnectionForm.command.trim() : null,
+                            args: parsedArgs,
+                            env: parsedEnv,
+                            url: this.newConnectionForm.url ? this.newConnectionForm.url.trim() : null,
+                            auth_config: parsedAuth,
+                            visibility: this.newConnectionForm.visibility
+                        };
+
+                        const res = await this.apiFetch('/api/v1/connections', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+
+                        if (res && res.ok) {
+                            const data = await res.json();
+                            const connId = data.connection_id || cleanId;
+                            
+                            if (this.newConnectionForm.targetInstanceSlug) {
+                                try {
+                                    await this.apiFetch(`/api/v1/instances/${this.newConnectionForm.targetInstanceSlug}/connections`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ connection_id: connId })
+                                    });
+                                } catch (attachErr) {
+                                    console.error('Falha ao vincular à instância:', attachErr);
+                                }
+                            }
+
+                            this.showCreateConnectionModal = false;
+                            this.showToast(`Conexão "${payload.name}" criada com sucesso!`, 'success');
+                            await this.refreshAll();
+                            if (this.newConnectionForm.targetInstanceSlug) {
+                                await this.selectInstance(this.newConnectionForm.targetInstanceSlug);
+                            }
+                        } else {
+                            const err = await res.json();
+                            this.showToast(err.detail || 'Erro ao criar conexão.', 'error');
+                        }
+                    } catch (e) {
+                        this.showToast('Erro de sintaxe JSON nos parâmetros: ' + e.message, 'error');
+                    }
+                },
+
+                openCreateTemplateModal() {
+                    this.newTemplateForm = {
+                        name: '',
+                        description: '',
+                        prefix: '',
+                        type: 'stdio',
+                        command: '',
+                        argsText: '',
+                        envText: '{}',
+                        authConfigText: '{}',
+                        visibility: 'shared'
+                    };
+                    this.showCreateTemplateModal = true;
+                },
+
+                async submitCreateTemplate() {
+                    if (!this.newTemplateForm.name || !this.newTemplateForm.prefix) {
+                        this.showToast('Preencha os campos obrigatórios (Nome e Prefixo).', 'error');
+                        return;
+                    }
+
+                    try {
+                        let parsedArgs = [];
+                        const trimmedArgs = (this.newTemplateForm.argsText || '').trim();
+                        if (trimmedArgs.startsWith('[')) {
+                            parsedArgs = JSON.parse(trimmedArgs);
+                        } else if (trimmedArgs) {
+                            parsedArgs = trimmedArgs.split(/\\s+/);
+                        }
+
+                        let parsedEnv = {};
+                        if ((this.newTemplateForm.envText || '').trim()) {
+                            parsedEnv = JSON.parse(this.newTemplateForm.envText);
+                        }
+
+                        let parsedAuth = {};
+                        if ((this.newTemplateForm.authConfigText || '').trim()) {
+                            parsedAuth = JSON.parse(this.newTemplateForm.authConfigText);
+                        }
+
+                        const payload = {
+                            name: this.newTemplateForm.name.trim(),
+                            description: (this.newTemplateForm.description || '').trim(),
+                            prefix: this.newTemplateForm.prefix.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_'),
+                            type: this.newTemplateForm.type,
+                            command: this.newTemplateForm.command ? this.newTemplateForm.command.trim() : null,
+                            args: parsedArgs,
+                            env: parsedEnv,
+                            auth_config: parsedAuth,
+                            visibility: this.newTemplateForm.visibility
+                        };
+
+                        const res = await this.apiFetch('/api/v1/connection-templates', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+
+                        if (res && res.ok) {
+                            this.showCreateTemplateModal = false;
+                            this.showToast(`Modelo "${payload.name}" criado com sucesso!`, 'success');
+                            await this.fetchTemplates();
+                        } else {
+                            const err = await res.json();
+                            this.showToast(err.detail || 'Erro ao criar modelo.', 'error');
+                        }
+                    } catch (e) {
+                        this.showToast('Erro de sintaxe JSON nos parâmetros: ' + e.message, 'error');
                     }
                 },
 
