@@ -8,7 +8,7 @@
 
 **Enterprise-Grade Model Context Protocol (MCP) Gateway, Reverse Proxy, and Multi-Tenant Tool Aggregation Hub.**
 
-Epyatis MCP Central provides a robust orchestration layer that bridges autonomous AI agent platforms (such as **Paperclip**, **Claude Desktop**, **Cursor**, **Codex**, and custom LLM agents) with heterogeneous enterprise data sources and execution environments.
+This is a Carlos and Epyatis try for a open-source community contribution. This MCP Center provides a robust orchestration layer that bridges autonomous AI agent platforms (such as **Paperclip**, **Claude Desktop**, **Cursor**, **Codex**, and custom LLM agents) with heterogeneous enterprise data sources and execution environments.
 
 Instead of configuring dozens of individual MCP servers on each agent workstation or container, MCP Central aggregates multiple upstream servers (local stdio subprocesses, remote SSE microservices, and dynamic OpenAPI/REST specifications) into logical, scoped, and token-authenticated endpoints.
 
