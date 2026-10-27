@@ -69,6 +69,7 @@ class InstanceGateway:
                     connection_id=conn.id,
                     prefix=prefix,
                     data_sources_map=self.config.data_sources_map,
+                    instance_slug=self.slug,
                 )
             elif conn.type == "stdio":
                 if conn.command:

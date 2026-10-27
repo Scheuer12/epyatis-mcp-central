@@ -1704,6 +1704,43 @@ class SourcesMapUpdateRequest(BaseModel):
     sources: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class NodalDataSourceCreateRequest(BaseModel):
+    id: str | None = None
+    name: str
+    description: str = ""
+    purpose: str = ""
+    system: str
+    tags: list[str] = Field(default_factory=list)
+    authority: str = "official"
+    status: str = "active"
+    resource_type: str = "unspecified"
+    native_resource_id: str | None = None
+    primary_tools: list[str] = Field(default_factory=list)
+    default_query_params: dict[str, Any] = Field(default_factory=dict)
+    historical_or_alternative_sources: list[str] = Field(default_factory=list)
+    version: str = "1.0"
+    guidance: str = ""
+    content_types: list[str] = Field(default_factory=list)
+
+
+class NodalDataSourceUpdateRequest(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    purpose: str | None = None
+    system: str | None = None
+    tags: list[str] | None = None
+    authority: str | None = None
+    status: str | None = None
+    resource_type: str | None = None
+    native_resource_id: str | None = None
+    primary_tools: list[str] | None = None
+    default_query_params: dict[str, Any] | None = None
+    historical_or_alternative_sources: list[str] | None = None
+    version: str | None = None
+    guidance: str | None = None
+    content_types: list[str] | None = None
+
+
 class ToolToggleRequest(BaseModel):
     is_enabled: bool = Field(..., description="Novo estado da ferramenta nesta instância")
 
@@ -1858,6 +1895,123 @@ async def update_instance_sources_map(
     await gateway_manager.reload_instance(slug)
 
     return {"status": "success", "message": "Mapa de fontes atualizado com sucesso."}
+
+
+# --- Endpoints de Registro Nodal de Fontes de Dados (Nodal Sources Registry) ---
+
+@api_router.get("/instances/{slug}/sources")
+def list_instance_sources_endpoint(
+    slug: str,
+    purpose: str | None = None,
+    tag: str | None = None,
+    system: str | None = None,
+    authority: str | None = None,
+    status: str | None = None,
+    db: Session = Depends(get_db),
+    current_user: UserEntity = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Lista as fontes de dados registradas para uma instância com filtros opcionais."""
+    instance = CentralRepository.get_instance_by_slug(db, slug)
+    if not instance:
+        raise HTTPException(status_code=404, detail="Instância não encontrada.")
+    sources = CentralRepository.get_instance_sources(db, slug)
+
+    if purpose:
+        sources = [s for s in sources if purpose.lower() in (s.get("purpose") or "").lower()]
+    if tag:
+        sources = [s for s in sources if any(tag.lower() == t.lower() for t in s.get("tags", []))]
+    if system:
+        sources = [s for s in sources if (s.get("system") or "").lower() == system.lower()]
+    if authority:
+        sources = [s for s in sources if (s.get("authority") or "").lower() == authority.lower()]
+    if status:
+        sources = [s for s in sources if (s.get("status") or "").lower() == status.lower()]
+
+    return {"sources": sources, "count": len(sources)}
+
+
+@api_router.post("/instances/{slug}/sources")
+async def create_instance_source_endpoint(
+    slug: str,
+    data: NodalDataSourceCreateRequest,
+    db: Session = Depends(get_db),
+    current_user: UserEntity = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Registra uma nova fonte de dados operacional na instância (Administradores)."""
+    instance = CentralRepository.get_instance_by_slug(db, slug)
+    if not instance:
+        raise HTTPException(status_code=404, detail="Instância não encontrada.")
+    if current_user.role != "epy_root" and instance.user_id and instance.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Apenas o criador ou o master admin podem alterar fontes desta instância.")
+
+    created = CentralRepository.add_instance_source(db, slug, data.model_dump())
+    if not created:
+        raise HTTPException(status_code=400, detail="Erro ao registrar fonte de dados.")
+
+    await gateway_manager.reload_instance(slug)
+    return {"status": "success", "source": created}
+
+
+@api_router.get("/instances/{slug}/sources/{source_id}")
+def get_instance_source_endpoint(
+    slug: str,
+    source_id: str,
+    db: Session = Depends(get_db),
+    current_user: UserEntity = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Recupera a definição completa de uma fonte pelo ID."""
+    instance = CentralRepository.get_instance_by_slug(db, slug)
+    if not instance:
+        raise HTTPException(status_code=404, detail="Instância não encontrada.")
+    source = CentralRepository.get_instance_source_by_id(db, slug, source_id)
+    if not source:
+        raise HTTPException(status_code=404, detail=f"Fonte de dados '{source_id}' não encontrada.")
+    return {"status": "success", "source": source}
+
+
+@api_router.put("/instances/{slug}/sources/{source_id}")
+async def update_instance_source_endpoint(
+    slug: str,
+    source_id: str,
+    data: NodalDataSourceUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: UserEntity = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Atualiza metadados, identificador nativo, tags ou status de uma fonte (Administradores)."""
+    instance = CentralRepository.get_instance_by_slug(db, slug)
+    if not instance:
+        raise HTTPException(status_code=404, detail="Instância não encontrada.")
+    if current_user.role != "epy_root" and instance.user_id and instance.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Apenas o criador ou o master admin podem alterar fontes desta instância.")
+
+    updated = CentralRepository.update_instance_source(db, slug, source_id, data.model_dump(exclude_unset=True))
+    if not updated:
+        raise HTTPException(status_code=404, detail=f"Fonte de dados '{source_id}' não encontrada.")
+
+    await gateway_manager.reload_instance(slug)
+    return {"status": "success", "source": updated}
+
+
+@api_router.delete("/instances/{slug}/sources/{source_id}")
+async def delete_instance_source_endpoint(
+    slug: str,
+    source_id: str,
+    db: Session = Depends(get_db),
+    current_user: UserEntity = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Remove uma fonte de dados do registro operacional (Administradores)."""
+    instance = CentralRepository.get_instance_by_slug(db, slug)
+    if not instance:
+        raise HTTPException(status_code=404, detail="Instância não encontrada.")
+    if current_user.role != "epy_root" and instance.user_id and instance.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Apenas o criador ou o master admin podem alterar fontes desta instância.")
+
+    deleted = CentralRepository.delete_instance_source(db, slug, source_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"Fonte de dados '{source_id}' não encontrada.")
+
+    await gateway_manager.reload_instance(slug)
+    return {"status": "success", "message": f"Fonte '{source_id}' excluída com sucesso."}
 
 
 @api_router.get("/instances/{slug}/tools")

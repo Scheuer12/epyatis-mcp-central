@@ -38,6 +38,10 @@ from central.models import (
 logger = logging.getLogger(__name__)
 
 
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 class CentralRepository:
     """Acesso e mutação a instâncias, conexões, ferramentas e logs."""
 
@@ -370,19 +374,17 @@ class CentralRepository:
             if inst.data_sources_map:
                 try:
                     ds_dict = inst.data_sources_map
-                    sources = [
-                        DataSourceItem(
-                            name=s.get("name", ""),
-                            system=s.get("system", ""),
-                            content_types=s.get("content_types", []),
-                            primary_tools=s.get("primary_tools", []),
-                            guidance=s.get("guidance", ""),
-                        )
-                        for s in ds_dict.get("sources", [])
-                    ]
+                    sources = []
+                    for s in ds_dict.get("sources", []):
+                        if isinstance(s, dict):
+                            src_item = DataSourceItem(**s)
+                            src_item.ensure_id()
+                            sources.append(src_item)
                     ds_map = DataSourcesMap(
                         organization=ds_dict.get("organization", inst.name),
                         sources=sources,
+                        version=ds_dict.get("version", "1.0"),
+                        last_updated=ds_dict.get("last_updated"),
                     )
                 except Exception as e:
                     logger.warning(f"Erro ao converter data sources map da instância {inst.slug}: {e}")
@@ -520,10 +522,156 @@ class CentralRepository:
         if not instance:
             return None
 
+        # Assegura que todas as fontes tenham IDs estáveis
+        sources = data_sources_map.get("sources", [])
+        for s in sources:
+            if isinstance(s, dict) and not s.get("id"):
+                import re
+                clean_name = re.sub(r'[^a-z0-9]+', '.', (s.get("name") or "").lower()).strip('.')
+                clean_sys = re.sub(r'[^a-z0-9]+', '.', (s.get("system") or "").lower()).strip('.')
+                s["id"] = f"{clean_sys}.{clean_name}" if clean_sys else clean_name
+
+        data_sources_map["sources"] = sources
+        if not data_sources_map.get("last_updated"):
+            data_sources_map["last_updated"] = _utc_now().isoformat()
+
         instance.data_sources_map_json = json.dumps(data_sources_map, ensure_ascii=False)
         db.commit()
         db.refresh(instance)
         return instance
+
+    @staticmethod
+    def get_instance_sources(db: Session, slug: str) -> list[dict[str, Any]]:
+        """Retorna todas as fontes registradas no mapa de uma instância com IDs garantidos."""
+        instance = db.query(InstanceEntity).filter(InstanceEntity.slug == slug).first()
+        if not instance or not instance.data_sources_map:
+            return []
+        ds_map = instance.data_sources_map
+        sources = ds_map.get("sources", [])
+        for s in sources:
+            if isinstance(s, dict) and not s.get("id"):
+                import re
+                clean_name = re.sub(r'[^a-z0-9]+', '.', (s.get("name") or "").lower()).strip('.')
+                clean_sys = re.sub(r'[^a-z0-9]+', '.', (s.get("system") or "").lower()).strip('.')
+                s["id"] = f"{clean_sys}.{clean_name}" if clean_sys else clean_name
+        return sources
+
+    @staticmethod
+    def get_instance_source_by_id(db: Session, slug: str, source_id: str) -> dict[str, Any] | None:
+        """Recupera uma fonte específica pelo seu ID estável."""
+        sources = CentralRepository.get_instance_sources(db, slug)
+        sid = source_id.strip().lower()
+        for s in sources:
+            if (s.get("id") or "").lower() == sid:
+                return s
+        return None
+
+    @staticmethod
+    def add_instance_source(db: Session, slug: str, source_data: dict[str, Any]) -> dict[str, Any] | None:
+        """Registra uma nova fonte de dados no registro da instância."""
+        instance = db.query(InstanceEntity).filter(InstanceEntity.slug == slug).first()
+        if not instance:
+            return None
+        current_map = instance.data_sources_map or {"organization": instance.name, "sources": []}
+        sources = current_map.get("sources", [])
+
+        # Garante ID estável
+        item = DataSourceItem(**source_data)
+        item.ensure_id()
+        now_iso = _utc_now().isoformat()
+        if not item.last_updated:
+            item.last_updated = now_iso
+
+        # Se já existir uma fonte com o mesmo ID, atualiza
+        updated_or_added = False
+        for idx, s in enumerate(sources):
+            if s.get("id") == item.id:
+                sources[idx] = item.model_dump()
+                updated_or_added = True
+                break
+
+        if not updated_or_added:
+            sources.append(item.model_dump())
+
+        current_map["sources"] = sources
+        current_map["last_updated"] = now_iso
+        instance.data_sources_map_json = json.dumps(current_map, ensure_ascii=False)
+        db.commit()
+        db.refresh(instance)
+        return item.model_dump()
+
+    @staticmethod
+    def update_instance_source(db: Session, slug: str, source_id: str, updates: dict[str, Any]) -> dict[str, Any] | None:
+        """Atualiza campos, tags, status ou identificador nativo de uma fonte preservando histórico."""
+        instance = db.query(InstanceEntity).filter(InstanceEntity.slug == slug).first()
+        if not instance or not instance.data_sources_map:
+            return None
+        current_map = instance.data_sources_map
+        sources = current_map.get("sources", [])
+
+        target_idx = None
+        sid = source_id.strip().lower()
+        for idx, s in enumerate(sources):
+            if (s.get("id") or "").lower() == sid:
+                target_idx = idx
+                break
+
+        if target_idx is None:
+            return None
+
+        current_source = sources[target_idx]
+
+        # Preserva referência histórica se o identificador de recurso nativo for alterado
+        old_native = current_source.get("native_resource_id")
+        new_native = updates.get("native_resource_id")
+        if new_native and old_native and new_native != old_native:
+            history = list(current_source.get("historical_or_alternative_sources", []))
+            hist_entry = f"{old_native} (substituído em {_utc_now().isoformat()[:10]})"
+            if hist_entry not in history:
+                history.append(hist_entry)
+            current_source["historical_or_alternative_sources"] = history
+
+        # Aplica atualizações
+        for k, v in updates.items():
+            if v is not None:
+                current_source[k] = v
+
+        # Atualiza timestamp e versionamento
+        now_iso = _utc_now().isoformat()
+        current_source["last_updated"] = now_iso
+        try:
+            curr_v = float(current_source.get("version", "1.0"))
+            current_source["version"] = f"{curr_v + 0.1:.1f}"
+        except Exception:
+            current_source["version"] = "1.1"
+
+        sources[target_idx] = current_source
+        current_map["sources"] = sources
+        current_map["last_updated"] = now_iso
+        instance.data_sources_map_json = json.dumps(current_map, ensure_ascii=False)
+        db.commit()
+        db.refresh(instance)
+        return current_source
+
+    @staticmethod
+    def delete_instance_source(db: Session, slug: str, source_id: str) -> bool:
+        """Remove uma fonte de dados do registro operacional."""
+        instance = db.query(InstanceEntity).filter(InstanceEntity.slug == slug).first()
+        if not instance or not instance.data_sources_map:
+            return False
+        current_map = instance.data_sources_map
+        sources = current_map.get("sources", [])
+        sid = source_id.strip().lower()
+        new_sources = [s for s in sources if (s.get("id") or "").lower() != sid]
+        if len(new_sources) == len(sources):
+            return False
+
+        current_map["sources"] = new_sources
+        current_map["last_updated"] = _utc_now().isoformat()
+        instance.data_sources_map_json = json.dumps(current_map, ensure_ascii=False)
+        db.commit()
+        db.refresh(instance)
+        return True
 
     # --- Gestão de Usuários e Sessões ---
 

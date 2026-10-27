@@ -10,16 +10,76 @@ instances:
     data_sources_map:
       organization: "Horst Group"
       sources:
-        - name: "Google Drive (@horstgroup.net)"
-          system: "google_drive"
-          content_types: ["planilhas_financeiras", "cronogramas", "documentos_internos", "propostas"]
-          primary_tools: ["gdrive__search_files", "gdrive__read_file", "gdrive__create_file"]
-          guidance: "Consulte o Google Drive para qualquer documento oficial, planilhas operacionais e arquivos arquivados da Horst Group."
-        - name: "Periskope WhatsApp"
+        - id: "horst.procurement.whatsapp.primary"
+          name: "Horst - Compras (WhatsApp)"
+          description: "Grupo oficial de WhatsApp da equipe de compras e cotações da Horst Group."
+          purpose: "procurement_communications"
           system: "periskope"
-          content_types: ["mensagens_whatsapp", "grupos_clientes", "atendimentos", "notificacoes"]
-          primary_tools: ["periskope__list_chats", "periskope__send_message", "periskope__get_chat_history"]
-          guidance: "Consulte o Periskope para acompanhar comunicações ativas com clientes, mensagens em grupos de WhatsApp e histórico de atendimentos."
+          tags: ["procurement", "whatsapp", "official", "compras"]
+          authority: "official"
+          status: "active"
+          resource_type: "whatsapp_group"
+          native_resource_id: "120363429855948681@g.us"
+          primary_tools: ["periskope__periskope_list_messages_in_a_chat", "periskope__periskope_send_message"]
+          default_query_params:
+            chat_id: "120363429855948681@g.us"
+          guidance: "Grupo oficial de WhatsApp da equipe de compras. Use para identificar novas demandas, cotações e mensagens operacionais de aquisição de insumos."
+        - id: "horst.operations.whatsapp.field"
+          name: "Horst - Operações em Campo (WhatsApp)"
+          description: "Grupo de comunicações operacionais de campo e logística."
+          purpose: "field_operations_communications"
+          system: "periskope"
+          tags: ["operations", "whatsapp", "field", "official"]
+          authority: "official"
+          status: "active"
+          resource_type: "whatsapp_group"
+          native_resource_id: "120363045612345678@g.us"
+          primary_tools: ["periskope__periskope_list_messages_in_a_chat"]
+          default_query_params:
+            chat_id: "120363045612345678@g.us"
+          guidance: "Comunicações ativas de campo com equipes e clientes para reagendamentos e ocorrências do dia."
+        - id: "horst.procurement.spreadsheet.ssot"
+          name: "Horst - Rastreio de Compras (Planilha SSoT)"
+          description: "Planilha oficial Single Source of Truth para conciliação e rastreamento de compras."
+          purpose: "procurement_tracking"
+          system: "gdrive"
+          tags: ["procurement", "spreadsheet", "ssot", "official", "compras"]
+          authority: "official"
+          status: "active"
+          resource_type: "spreadsheet"
+          native_resource_id: "14tR74Ve0GNZ2UT0N2VFuFteVZe3cmsiy"
+          primary_tools: ["gdrive__sheets-get-values", "gdrive__sheets-append-values", "gdrive__sheets-update-values"]
+          default_query_params:
+            spreadsheetId: "14tR74Ve0GNZ2UT0N2VFuFteVZe3cmsiy"
+          guidance: "Planilha oficial Single Source of Truth para rastreamento de compras, conciliação e aprovações. Localizada na pasta Gestao SSoT."
+        - id: "horst.operations.spreadsheet.schedule"
+          name: "Horst - Programação de Serviços Diários"
+          description: "Planilha de programação de equipes e cronograma de serviços diários."
+          purpose: "field_schedule"
+          system: "gdrive"
+          tags: ["operations", "schedule", "spreadsheet", "official"]
+          authority: "official"
+          status: "active"
+          resource_type: "spreadsheet"
+          native_resource_id: "1hygjyCuWp_YkAXXADWoGDpl7aT3FRyrh"
+          primary_tools: ["gdrive__sheets-get-values", "gdrive__sheets-update-values"]
+          default_query_params:
+            spreadsheetId: "1hygjyCuWp_YkAXXADWoGDpl7aT3FRyrh"
+          guidance: "Planilha de programação de equipes e cronograma de serviços diários."
+        - id: "horst.governance.vault.primary"
+          name: "Horst - Vault de Regras e Governança"
+          description: "Pasta oficial de governança, diretrizes operacionais e regras corporativas da Horst."
+          purpose: "governance_and_rules"
+          system: "gdrive"
+          tags: ["governance", "rules", "drive_folder", "official"]
+          authority: "official"
+          status: "active"
+          resource_type: "folder"
+          native_resource_id: "1X1HyCNepKUiLbx4SQqxGQgVsnQA1pIzf"
+          primary_tools: ["gdrive__list-files", "gdrive__read-file"]
+          default_query_params:
+            folderId: "1X1HyCNepKUiLbx4SQqxGQgVsnQA1pIzf"
+          guidance: "Vault oficial de governança, diretrizes operacionais e regras da Horst. Localizado na pasta do Google Drive ID 1X1HyCNepKUiLbx4SQqxGQgVsnQA1pIzf."
     connections:
       - id: "internal"
         enabled: true

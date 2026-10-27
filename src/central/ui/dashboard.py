@@ -400,8 +400,8 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                                 <div x-show="studioTab === 'sources_map'" class="p-6 space-y-4">
                                     <div class="flex items-center justify-between pb-3 border-b border-slate-800">
                                         <div>
-                                            <h4 class="text-xs font-bold uppercase tracking-wider text-slate-300">Instruções Operacionais da IA</h4>
-                                            <p class="text-xs text-slate-400">Diretrizes ensinando o agente onde encontrar cada documento e dado nesta instância.</p>
+                                            <h4 class="text-xs font-bold uppercase tracking-wider text-slate-300">Registro Operacional Nodal de Fontes de Dados</h4>
+                                            <p class="text-xs text-slate-400">Catálogo operacional progressivamente descoberto por agentes HorstAI com nós independentes, tags e metadados de autoridade.</p>
                                         </div>
                                         <div class="flex items-center gap-2">
                                             <!-- Carregar de Kit -->
@@ -437,23 +437,68 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                                         </div>
 
                                         <template x-for="(s, sIndex) in (sourcesMapData.sources || [])" :key="sIndex">
-                                            <div class="p-3.5 rounded-xl border border-slate-750 bg-slate-950/70 space-y-2 relative shadow-xs">
+                                            <div class="p-3.5 rounded-xl border border-slate-750 bg-slate-950/70 space-y-3 relative shadow-xs">
                                                 <button @click="removeSourceItem(sIndex)" class="absolute top-3 right-3 text-slate-400 hover:text-rose-400 text-xs p-1" title="Remover Fonte">
                                                     <i class="fa-solid fa-xmark"></i>
                                                 </button>
-                                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pr-6">
+                                                
+                                                <div class="grid grid-cols-1 md:grid-cols-3 gap-3 pr-6">
+                                                    <div>
+                                                        <label class="block text-[10px] font-semibold text-slate-400 uppercase">ID Estável (Node ID)</label>
+                                                        <input type="text" x-model="s.id" placeholder="ex: horst.procurement.whatsapp.primary" class="w-full text-xs font-mono border border-slate-700 rounded-md p-1.5 bg-slate-900 text-blue-400 focus:border-blue-500">
+                                                    </div>
                                                     <div>
                                                         <label class="block text-[10px] font-semibold text-slate-400 uppercase">Nome da Fonte</label>
-                                                        <input type="text" x-model="s.name" class="w-full text-xs border border-slate-700 rounded-md p-1.5 bg-slate-900 text-slate-200 focus:border-blue-500">
+                                                        <input type="text" x-model="s.name" placeholder="ex: Horst - Compras (WhatsApp)" class="w-full text-xs border border-slate-700 rounded-md p-1.5 bg-slate-900 text-slate-200 focus:border-blue-500">
                                                     </div>
                                                     <div>
-                                                        <label class="block text-[10px] font-semibold text-slate-400 uppercase">Identificador de Sistema</label>
-                                                        <input type="text" x-model="s.system" class="w-full text-xs border border-slate-700 rounded-md p-1.5 bg-slate-900 text-slate-200 focus:border-blue-500">
+                                                        <label class="block text-[10px] font-semibold text-slate-400 uppercase">Propósito (Purpose)</label>
+                                                        <input type="text" x-model="s.purpose" placeholder="ex: procurement_communications" class="w-full text-xs font-mono border border-slate-700 rounded-md p-1.5 bg-slate-900 text-slate-200 focus:border-blue-500">
                                                     </div>
                                                 </div>
+
+                                                <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                                                    <div>
+                                                        <label class="block text-[10px] font-semibold text-slate-400 uppercase">Sistema</label>
+                                                        <input type="text" x-model="s.system" placeholder="ex: periskope, gdrive" class="w-full text-xs border border-slate-700 rounded-md p-1.5 bg-slate-900 text-slate-200 focus:border-blue-500">
+                                                    </div>
+                                                    <div>
+                                                        <label class="block text-[10px] font-semibold text-slate-400 uppercase">Autoridade</label>
+                                                        <select x-model="s.authority" class="w-full text-xs border border-slate-700 rounded-md p-1.5 bg-slate-900 text-slate-200 focus:border-blue-500">
+                                                            <option value="official">Official (SSoT)</option>
+                                                            <option value="operational">Operational</option>
+                                                            <option value="reference">Reference</option>
+                                                            <option value="draft">Draft</option>
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label class="block text-[10px] font-semibold text-slate-400 uppercase">Status</label>
+                                                        <select x-model="s.status" class="w-full text-xs border border-slate-700 rounded-md p-1.5 bg-slate-900 text-slate-200 focus:border-blue-500">
+                                                            <option value="active">Active</option>
+                                                            <option value="deprecated">Deprecated</option>
+                                                            <option value="archived">Archived</option>
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label class="block text-[10px] font-semibold text-slate-400 uppercase">Tipo de Recurso</label>
+                                                        <input type="text" x-model="s.resource_type" placeholder="ex: whatsapp_group, spreadsheet" class="w-full text-xs border border-slate-700 rounded-md p-1.5 bg-slate-900 text-slate-200 focus:border-blue-500">
+                                                    </div>
+                                                </div>
+
+                                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                    <div>
+                                                        <label class="block text-[10px] font-semibold text-slate-400 uppercase">ID Nativo (Native Resource ID)</label>
+                                                        <input type="text" x-model="s.native_resource_id" placeholder="ex: 120363405785055048@g.us ou ID da Planilha" class="w-full text-xs font-mono border border-slate-700 rounded-md p-1.5 bg-slate-900 text-emerald-400 focus:border-blue-500">
+                                                    </div>
+                                                    <div>
+                                                        <label class="block text-[10px] font-semibold text-slate-400 uppercase">Tags de Descoberta (separadas por vírgula)</label>
+                                                        <input type="text" :value="(s.tags || []).join(', ')" @input="s.tags = $event.target.value.split(',').map(t => t.trim()).filter(Boolean)" placeholder="ex: procurement, whatsapp, official" class="w-full text-xs border border-slate-700 rounded-md p-1.5 bg-slate-900 text-amber-300 focus:border-blue-500">
+                                                    </div>
+                                                </div>
+
                                                 <div>
-                                                    <label class="block text-[10px] font-semibold text-slate-400 uppercase">Diretriz de Consulta (Guidance para a IA)</label>
-                                                    <textarea x-model="s.guidance" rows="2" class="w-full text-xs border border-slate-700 rounded-md p-1.5 bg-slate-900 text-slate-200 focus:border-blue-500"></textarea>
+                                                    <label class="block text-[10px] font-semibold text-slate-400 uppercase">Diretriz de Consulta (Guidance para Agentes HorstAI)</label>
+                                                    <textarea x-model="s.guidance" rows="2" placeholder="Instruções claras para os agentes..." class="w-full text-xs border border-slate-700 rounded-md p-1.5 bg-slate-900 text-slate-200 focus:border-blue-500"></textarea>
                                                 </div>
                                             </div>
                                         </template>
@@ -2561,9 +2606,17 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
                 addSourceItem() {
                     if (!this.sourcesMapData.sources) this.sourcesMapData.sources = [];
+                    const ts = Date.now();
                     this.sourcesMapData.sources.push({
-                        name: 'Nova Fonte',
-                        system: 'sistema_custom',
+                        id: `source.node_${ts}`,
+                        name: 'Nova Fonte Operacional',
+                        purpose: 'general_operations',
+                        tags: ['operations'],
+                        system: 'gdrive',
+                        authority: 'official',
+                        status: 'active',
+                        resource_type: 'spreadsheet',
+                        native_resource_id: '',
                         content_types: ['documentos'],
                         primary_tools: [],
                         guidance: 'Consulte esta fonte para obter informações sobre...'
