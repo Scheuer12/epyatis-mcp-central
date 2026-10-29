@@ -26,6 +26,8 @@ def init_database(yaml_path: Path | None = None) -> None:
     logger.info("Verificando integridade das tabelas do banco SQLite...")
     Base.metadata.create_all(bind=engine)
     _migrate_columns()
+    _migrate_legacy_secret_columns()
+    _migrate_token_hashes()
 
     with get_db_context() as db:
         _seed_default_data(db, yaml_path)
@@ -59,6 +61,74 @@ def _migrate_columns() -> None:
         logger.warning(f"Aviso durante verificação de migrações: {e}")
 
 
+def _migrate_token_hashes() -> None:
+    """Convert legacy plaintext bearer tokens to one-way digests in place."""
+    from central.security.tokens import TOKEN_HASH_PREFIX, hash_bearer_token
+
+    try:
+        statements = (
+            ("SELECT id, token FROM instance_tokens", "UPDATE instance_tokens SET token = ? WHERE id = ?"),
+            ("SELECT id, token FROM user_sessions", "UPDATE user_sessions SET token = ? WHERE id = ?"),
+        )
+        with engine.begin() as conn:
+            for select_sql, update_sql in statements:
+                rows = conn.exec_driver_sql(select_sql).fetchall()
+                for row_id, token in rows:
+                    if token and not token.startswith(TOKEN_HASH_PREFIX):
+                        conn.exec_driver_sql(
+                            update_sql,
+                            (hash_bearer_token(token), row_id),
+                        )
+    except Exception as exc:
+        logger.error("Falha ao migrar tokens legados para hashes: %s", exc)
+        raise
+
+
+def _migrate_legacy_secret_columns() -> None:
+    """Encrypt validated legacy JSON fields without accepting plaintext at runtime."""
+    from central.security.crypto import encrypt_string
+
+    statements = (
+        (
+            "connections.env_json",
+            "SELECT id, env_json FROM connections",
+            "UPDATE connections SET env_json = ? WHERE id = ?",
+        ),
+        (
+            "connections.auth_config_json",
+            "SELECT id, auth_config_json FROM connections",
+            "UPDATE connections SET auth_config_json = ? WHERE id = ?",
+        ),
+        (
+            "connection_templates.env_json",
+            "SELECT id, env_json FROM connection_templates",
+            "UPDATE connection_templates SET env_json = ? WHERE id = ?",
+        ),
+        (
+            "connection_templates.auth_config_json",
+            "SELECT id, auth_config_json FROM connection_templates",
+            "UPDATE connection_templates SET auth_config_json = ? WHERE id = ?",
+        ),
+    )
+    try:
+        with engine.begin() as conn:
+            for field_name, select_sql, update_sql in statements:
+                rows = conn.exec_driver_sql(select_sql).fetchall()
+                for row_id, stored in rows:
+                    if not stored or stored.startswith("enc:"):
+                        continue
+                    parsed = json.loads(stored)
+                    if not isinstance(parsed, dict):
+                        raise ValueError(f"{field_name} deve conter um objeto JSON.")
+                    conn.exec_driver_sql(
+                        update_sql,
+                        (encrypt_string(stored), row_id),
+                    )
+    except Exception as exc:
+        logger.error("Falha na migração controlada de segredos legados: %s", exc)
+        raise
+
+
 def _seed_default_data(db: Session, yaml_path: Path | None = None) -> None:
     # 1. Cria usuário epy_root se não existir
     root_user = db.query(UserEntity).filter(UserEntity.username == "epy_root").first()
@@ -74,16 +144,16 @@ def _seed_default_data(db: Session, yaml_path: Path | None = None) -> None:
         db.add(root_user)
         db.flush()
 
-    # 2. Verifica se a instância horst-suite já existe no banco
-    existing_instance = db.query(InstanceEntity).filter(InstanceEntity.slug == "horst-suite").first()
+    # Existing installations are never overwritten by example bootstrap data.
+    existing_instance = db.query(InstanceEntity).first()
     if existing_instance:
-        logger.info("Instância 'horst-suite' já existe no banco SQLite. Pulando seed.")
+        logger.info("O banco já contém instâncias. Pulando seed de exemplo.")
         return
 
     # 3. Lê o arquivo de bootstrap se fornecido
     if not yaml_path or not yaml_path.exists():
         logger.info("Arquivo de bootstrap YAML não encontrado. Criando instâncias padrão programaticamente.")
-        _create_default_horst_suite(db, root_user.id)
+        _create_default_instance(db, root_user.id)
         return
 
     try:
@@ -92,7 +162,7 @@ def _seed_default_data(db: Session, yaml_path: Path | None = None) -> None:
 
         instances_data = data.get("instances", [])
         if not instances_data:
-            _create_default_horst_suite(db, root_user.id)
+            _create_default_instance(db, root_user.id)
             return
 
         for inst_data in instances_data:
@@ -128,13 +198,7 @@ def _seed_default_data(db: Session, yaml_path: Path | None = None) -> None:
                 # Busca ou cria a conexão
                 conn = db.query(ConnectionEntity).filter(ConnectionEntity.id == conn_id).first()
                 if not conn:
-                    conn_name = f"Conexão {conn_id.title()}"
-                    if conn_id == "gdrive":
-                        conn_name = "Google Drive (@horstgroup.net)"
-                    elif conn_id == "periskope":
-                        conn_name = "Periskope WhatsApp"
-                    elif conn_id == "internal":
-                        conn_name = "Epyatis Diagnósticos Internos"
+                    conn_name = "Epyatis Internal Diagnostics" if conn_id == "internal" else f"Connection {conn_id.title()}"
 
                     conn = ConnectionEntity(
                         id=conn_id,
@@ -166,9 +230,11 @@ def _seed_default_data(db: Session, yaml_path: Path | None = None) -> None:
                 token_val = token_data.get("token")
                 label = token_data.get("label", "Default Token")
                 if token_val:
+                    from central.security.tokens import hash_bearer_token
+
                     inst_token = InstanceTokenEntity(
                         instance_id=instance.id,
-                        token=token_val,
+                        token=hash_bearer_token(token_val),
                         label=label,
                     )
                     db.add(inst_token)
@@ -179,35 +245,27 @@ def _seed_default_data(db: Session, yaml_path: Path | None = None) -> None:
     except Exception as e:
         db.rollback()
         logger.error(f"Erro ao popular dados de bootstrap no SQLite: {e}", exc_info=True)
-        _create_default_horst_suite(db, root_user.id)
+        _create_default_instance(db, root_user.id)
 
 
-def _create_default_horst_suite(db: Session, user_id: str) -> None:
-    """Criação programática de fallback para a instância horst-suite."""
+def _create_default_instance(db: Session, user_id: str) -> None:
+    """Create a credential-free local example when no bootstrap file exists."""
     try:
         inst = InstanceEntity(
-            id="horst-suite",
+            id="demo-suite",
             user_id=user_id,
-            name="Horst Operational Suite",
-            slug="horst-suite",
-            description="Endpoint agregador de operações com Google Drive e Periskope WhatsApp para a Horst Group.",
+            name="Demo MCP Suite",
+            slug="demo-suite",
+            description="Local development instance with internal diagnostics only.",
+            visibility="private",
             is_active=True,
         )
         db.add(inst)
         db.flush()
 
-        tok = InstanceTokenEntity(
-            instance_id=inst.id,
-            token="epy_dev_token_123",
-            label="Paperclip Local Dev Connector",
-        )
-        db.add(tok)
-
-        # Conexões básicas
+        # Internal connection only; no subprocess and no pre-created bearer token.
         for cid, cname, ctype, cprefix, cmd, args, env in [
-            ("internal", "Diagnósticos Internos", "internal", "central", None, [], {}),
-            ("gdrive", "Google Drive (@horstgroup.net)", "stdio", "gdrive", "npx", ["-y", "@us-all/google-drive-mcp"], {"GOOGLE_DRIVE_ALLOW_WRITE": "true"}),
-            ("periskope", "Periskope WhatsApp", "stdio", "periskope", "npx", ["-y", "@periskope/whatsapp-mcp"], {}),
+            ("internal", "Internal Diagnostics", "internal", "central", None, [], {}),
         ]:
             c = db.query(ConnectionEntity).filter(ConnectionEntity.id == cid).first()
             if not c:
@@ -228,7 +286,7 @@ def _create_default_horst_suite(db: Session, user_id: str) -> None:
             db.add(InstanceConnectionEntity(instance_id=inst.id, connection_id=c.id, is_enabled=True))
 
         db.commit()
-        logger.info("Instância horst-suite padrão criada com sucesso no SQLite.")
+        logger.info("Instância de demonstração criada com sucesso no SQLite.")
     except Exception as e:
         db.rollback()
         logger.error(f"Falha ao criar instância fallback: {e}")

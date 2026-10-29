@@ -47,7 +47,7 @@ class InternalUpstream(BaseUpstream):
                 name="get_data_sources_map",
                 description=(
                     "Retorna o Mapa de Fontes de Dados Operacionais completo da organização. "
-                    "Use esta ferramenta para descobrir em qual sistema (Google Drive, Periskope, etc.) "
+                    "Use esta ferramenta para descobrir em qual sistema externo "
                     "e em quais ferramentas determinadas informações corporativas estão armazenadas."
                 ),
                 input_schema={
@@ -107,7 +107,7 @@ class InternalUpstream(BaseUpstream):
                     "properties": {
                         "source_id": {
                             "type": "string",
-                            "description": "Identificador estável e único da fonte de dados (ex: 'horst.procurement.whatsapp.primary')."
+                            "description": "Identificador estável e único da fonte de dados (ex: 'example.procurement.messages.primary')."
                         }
                     },
                     "required": ["source_id"]

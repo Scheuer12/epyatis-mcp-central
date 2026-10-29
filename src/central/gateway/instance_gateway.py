@@ -8,6 +8,7 @@ import logging
 import time
 from typing import Any
 import mcp.types as types
+from central import __version__
 from mcp.server.lowlevel.server import Server, ServerRequestContext
 from mcp.server.sse import SseServerTransport
 from mcp.server.transport_security import TransportSecuritySettings
@@ -15,12 +16,14 @@ from mcp.server.transport_security import TransportSecuritySettings
 from central.db.entities import InstanceEntity, InstanceToolEntity
 from central.db.repository import CentralRepository
 from central.db.session import get_db_context
+from central.config import settings
 from central.models import InstanceConfig
 from central.upstreams.base import BaseUpstream
 from central.upstreams.internal import InternalUpstream
 from central.upstreams.openapi_upstream import OpenApiUpstream
 from central.upstreams.remote_sse_upstream import RemoteSseUpstream
 from central.upstreams.stdio_upstream import StdioUpstream
+from central.security.tokens import verify_bearer_token
 
 logger = logging.getLogger(__name__)
 
@@ -39,17 +42,17 @@ class InstanceGateway:
         # Cria o servidor MCP nativo da instância
         self.mcp_server = Server(
             name=self.config.name,
-            version="0.2.0",
+            version=__version__,
             description=self.config.description,
             on_list_tools=self._handle_list_tools,
             on_call_tool=self._handle_call_tool,
         )
 
-        # Transport SSE com proteção DNS permissiva para conexões locais/Paperclip
+        # Transport SSE protected against DNS rebinding and untrusted origins.
         security = TransportSecuritySettings(
-            enable_dns_rebinding_protection=False,
-            allowed_hosts=["*"],
-            allowed_origins=["*"],
+            enable_dns_rebinding_protection=True,
+            allowed_hosts=settings.ALLOWED_HOSTS,
+            allowed_origins=settings.CORS_ALLOWED_ORIGINS,
         )
         self.sse_transport = SseServerTransport(
             endpoint=f"/mcp/{self.slug}/messages",
@@ -122,7 +125,7 @@ class InstanceGateway:
         if not self.valid_tokens:
             logger.warning(f"[Instance:{self.slug}] Acesso negado: nenhum token configurado para esta instância (Fail-Closed).")
             return False
-        return bool(token and token in self.valid_tokens)
+        return any(verify_bearer_token(token, stored) for stored in self.valid_tokens)
 
 
     async def _handle_list_tools(
@@ -269,7 +272,15 @@ class InstanceGateway:
                                 content=[types.TextContent(type="text", text=error_msg)],
                             )
             except Exception as perm_err:
-                logger.warning(f"[Instance:{self.slug}] Erro ao verificar permissão da tool: {perm_err}")
+                status = "error"
+                error_msg = "Falha ao verificar autorização da ferramenta; execução negada."
+                logger.error(
+                    f"[Instance:{self.slug}] Erro ao verificar permissão da tool; bloqueando execução: {perm_err}"
+                )
+                return types.CallToolResult(
+                    is_error=True,
+                    content=[types.TextContent(type="text", text=error_msg)],
+                )
 
             upstream = self.upstreams[conn_id]
             res = await upstream.call_tool(original_name, arguments)
@@ -292,9 +303,16 @@ class InstanceGateway:
             elapsed_ms = int((time.time() - start_time) * 1000)
             try:
                 with get_db_context() as db:
-                    args_summary = json.dumps(arguments, ensure_ascii=False)
-                    if len(args_summary) > 500:
-                        args_summary = args_summary[:497] + "..."
+                    args_summary = json.dumps(
+                        {
+                            "argument_keys": sorted(str(key) for key in arguments.keys()),
+                            "redacted": True,
+                            "serialized_size": len(json.dumps(arguments, ensure_ascii=False, default=str)),
+                        },
+                        ensure_ascii=False,
+                    )
+
+                    safe_error = error_msg[:500] if error_msg else None
 
                     CentralRepository.log_audit_event(
                         db=db,
@@ -303,7 +321,7 @@ class InstanceGateway:
                         status=status,
                         execution_time_ms=elapsed_ms,
                         arguments_summary=args_summary,
-                        error_message=error_msg,
+                        error_message=safe_error,
                     )
             except Exception as audit_err:
                 logger.warning(f"[Instance:{self.slug}] Erro ao registrar log de auditoria: {audit_err}")

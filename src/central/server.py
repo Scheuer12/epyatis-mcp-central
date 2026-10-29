@@ -3,12 +3,17 @@ Servidor FastAPI e rotas do Epyatis MCP Central (Fase 1: MVP Estruturado & UI).
 """
 
 from contextlib import asynccontextmanager
+import hashlib
+import json
 import logging
+import secrets
+import time
 from typing import Any
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from central.api.routes import api_router, auth_router
+from central import __version__
 from central.config import settings
 from central.db.seeder import init_database
 from central.gateway.manager import gateway_manager
@@ -59,7 +64,7 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 
 app = FastAPI(
     title="Epyatis MCP Central",
-    version="0.3.0",
+    version=__version__,
     description="Centralized MCP gateway and management platform",
     lifespan=lifespan,
 )
@@ -67,20 +72,90 @@ app = FastAPI(
 # Hardening de Cabeçalhos e CORS (SEC-06)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.CORS_ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "Mcp-Session-Id",
+        "X-Central-Admin-Key",
+        "X-Central-Session-Token",
+    ],
 )
 
 app.add_middleware(
     TrustedHostMiddleware,
-    allowed_hosts=getattr(settings, "ALLOWED_HOSTS", ["*"]),
+    allowed_hosts=settings.ALLOWED_HOSTS,
 )
 
 # Registra rotas de autenticação e API administrativa (v1)
 app.include_router(auth_router)
 app.include_router(api_router)
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    request_id = request.headers.get("x-request-id") or secrets.token_urlsafe(12)
+    request.state.request_id = request_id
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://cdn.jsdelivr.net; "
+        "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; "
+        "font-src 'self' https://cdnjs.cloudflare.com; img-src 'self' data:; "
+        "connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+    )
+    if request.url.path.startswith(("/api/", "/admin")):
+        response.headers["Cache-Control"] = "no-store"
+    if settings.CENTRAL_ENV == "production":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
+
+
+MCP_MAX_BODY_BYTES = 1_048_576
+MCP_SESSION_TTL_SECONDS = 3_600
+_mcp_http_sessions: dict[str, tuple[str, str, float]] = {}
+
+
+def _bearer_token(request: Request) -> str | None:
+    authorization = request.headers.get("authorization", "")
+    if not authorization.lower().startswith("bearer "):
+        return None
+    token = authorization.split(" ", 1)[1].strip()
+    return token or None
+
+
+def _token_digest(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _jsonrpc_error(request_id: Any, code: int, message: str, status_code: int = 200) -> JSONResponse:
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "error": {"code": code, "message": message},
+        },
+    )
+
+
+def _validate_mcp_session(request: Request, slug: str, token: str) -> bool:
+    session_id = request.headers.get("mcp-session-id", "").strip()
+    session = _mcp_http_sessions.get(session_id)
+    if not session:
+        return False
+    session_slug, session_digest, expires_at = session
+    if expires_at <= time.monotonic():
+        _mcp_http_sessions.pop(session_id, None)
+        return False
+    return session_slug == slug and secrets.compare_digest(session_digest, _token_digest(token))
 
 
 
@@ -99,7 +174,7 @@ async def health_check() -> dict[str, Any]:
     return {
         "status": "healthy",
         "service": "Epyatis MCP Central",
-        "version": "0.2.0",
+        "version": __version__,
         "instances": instances_status,
     }
 
@@ -110,11 +185,7 @@ async def handle_instance_sse(slug: str, request: Request) -> Response:
     if not gateway:
         raise HTTPException(status_code=404, detail=f"Instância '{slug}' não encontrada.")
 
-    # Dual-auth: Query param (?token=...) ou Header (Authorization: Bearer ...)
-    token = request.query_params.get("token")
-    auth_header = request.headers.get("authorization")
-    if not token and auth_header and auth_header.lower().startswith("bearer "):
-        token = auth_header.split(" ", 1)[1].strip()
+    token = _bearer_token(request)
 
     if not gateway.validate_token(token):
         logger.warning(f"[Security] Tentativa de conexão não autorizada na instância '{slug}'.")
@@ -141,20 +212,24 @@ async def handle_instance_post(slug: str, request: Request) -> Response:
     if not gateway:
         raise HTTPException(status_code=404, detail=f"Instância '{slug}' não encontrada.")
 
-    # Dual-auth: Query param (?token=...) ou Header (Authorization: Bearer ...)
-    token = request.query_params.get("token")
-    auth_header = request.headers.get("authorization")
-    if not token and auth_header and auth_header.lower().startswith("bearer "):
-        token = auth_header.split(" ", 1)[1].strip()
+    token = _bearer_token(request)
 
     if not gateway.validate_token(token):
         logger.warning(f"[Security] Tentativa de conexão não autorizada na instância '{slug}'.")
         raise HTTPException(status_code=401, detail="Token de instância ausente ou inválido.")
 
     try:
-        body = await request.json()
+        raw_body = await request.body()
+        if len(raw_body) > MCP_MAX_BODY_BYTES:
+            raise HTTPException(status_code=413, detail="Payload MCP excede o limite permitido.")
+        body = json.loads(raw_body)
+    except HTTPException:
+        raise
     except Exception:
         raise HTTPException(status_code=400, detail="Corpo da requisição deve ser um JSON válido.")
+
+    if not isinstance(body, dict) or body.get("jsonrpc") != "2.0" or not isinstance(body.get("method"), str):
+        return _jsonrpc_error(body.get("id") if isinstance(body, dict) else None, -32600, "Requisição JSON-RPC inválida.", 400)
 
     method = body.get("method")
     req_id = body.get("id")
@@ -162,6 +237,12 @@ async def handle_instance_post(slug: str, request: Request) -> Response:
     # Handshake de inicialização
     if method == "initialize":
         client_version = body.get("params", {}).get("protocolVersion", "2024-11-05")
+        session_id = secrets.token_urlsafe(32)
+        _mcp_http_sessions[session_id] = (
+            slug,
+            _token_digest(token),
+            time.monotonic() + MCP_SESSION_TTL_SECONDS,
+        )
         return JSONResponse(
             content={
                 "jsonrpc": "2.0",
@@ -175,12 +256,15 @@ async def handle_instance_post(slug: str, request: Request) -> Response:
                     },
                     "serverInfo": {
                         "name": gateway.config.name,
-                        "version": "0.2.0"
+                        "version": __version__
                     }
                 }
             },
-            headers={"mcp-session-id": "central-session-1"}
+            headers={"mcp-session-id": session_id}
         )
+
+    if not _validate_mcp_session(request, slug, token):
+        return _jsonrpc_error(req_id, -32001, "Sessão MCP ausente, expirada ou inválida.", 401)
 
     if method == "notifications/initialized":
         return Response(status_code=204)
@@ -249,6 +333,10 @@ async def handle_instance_messages(slug: str, request: Request) -> Response:
     gateway = gateway_manager.get_instance(slug)
     if not gateway:
         raise HTTPException(status_code=404, detail=f"Instância '{slug}' não encontrada.")
+
+    token = _bearer_token(request)
+    if not gateway.validate_token(token):
+        raise HTTPException(status_code=401, detail="Token de instância ausente ou inválido.")
 
     await gateway.sse_transport.handle_post_message(
         request.scope, request.receive, request._send

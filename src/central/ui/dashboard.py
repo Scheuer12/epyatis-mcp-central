@@ -84,7 +84,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     </div>
                 </div>
             </div>
-            <button @click="showAuthModal = true; authTab = 'switch'" class="text-slate-400 hover:text-blue-400 text-xs p-1.5 rounded-lg hover:bg-slate-800 transition-colors" title="Trocar Usuário ou Gerenciar Sessão">
+            <button @click="logout()" class="text-slate-400 hover:text-blue-400 text-xs p-1.5 rounded-lg hover:bg-slate-800 transition-colors" title="Encerrar sessão">
                 <i class="fa-solid fa-arrow-right-arrow-left"></i>
             </button>
         </div>
@@ -235,7 +235,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                                             <span class="flex items-center gap-1"><i class="fa-solid fa-plug text-[10px] text-slate-500"></i> <strong class="text-slate-200" x-text="(inst.connections || []).length"></strong></span>
                                             <span class="flex items-center gap-1"><i class="fa-solid fa-wrench text-[10px] text-slate-500"></i> <strong class="text-slate-200" x-text="inst.tools_count || 0"></strong></span>
                                         </div>
-                                        <button @click.stop="copyText(getEndpointUrl(inst.slug, (inst.tokens[0] || {}).token), 'URL do Paperclip copiada!')" 
+                                        <button @click.stop="copyText(getEndpointUrl(inst.slug), 'URL do cliente MCP copiada!')"
                                                 class="text-xs text-blue-400 hover:text-blue-300 font-medium flex items-center gap-1 hover:underline">
                                             <i class="fa-regular fa-copy"></i> Copiar URL
                                         </button>
@@ -312,9 +312,9 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                                     <div class="mt-4 p-3.5 bg-slate-900/90 rounded-lg border border-slate-750 flex items-center justify-between gap-4">
                                         <div class="overflow-hidden">
                                             <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">URL MCP Server-Sent Events (Paperclip / Claude)</span>
-                                            <code class="text-xs text-emerald-400 font-mono truncate block mt-0.5" x-text="getEndpointUrl(currentInstanceDetail.slug, (currentInstanceDetail.tokens[0] || {}).token)"></code>
+                                            <code class="text-xs text-emerald-400 font-mono truncate block mt-0.5" x-text="getEndpointUrl(currentInstanceDetail.slug)"></code>
                                         </div>
-                                        <button @click="copyText(getEndpointUrl(currentInstanceDetail.slug, (currentInstanceDetail.tokens[0] || {}).token), 'URL do Paperclip copiada!')"
+                                        <button @click="copyText(getEndpointUrl(currentInstanceDetail.slug), 'URL do cliente MCP copiada!')"
                                                 class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shrink-0 transition-colors flex items-center gap-1.5">
                                             <i class="fa-regular fa-copy"></i> Copiar URL
                                         </button>
@@ -401,7 +401,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                                     <div class="flex items-center justify-between pb-3 border-b border-slate-800">
                                         <div>
                                             <h4 class="text-xs font-bold uppercase tracking-wider text-slate-300">Registro Operacional Nodal de Fontes de Dados</h4>
-                                            <p class="text-xs text-slate-400">Catálogo operacional progressivamente descoberto por agentes HorstAI com nós independentes, tags e metadados de autoridade.</p>
+                                            <p class="text-xs text-slate-400">Catálogo operacional progressivamente descoberto por agentes, com nós independentes, tags e metadados de autoridade.</p>
                                         </div>
                                         <div class="flex items-center gap-2">
                                             <!-- Carregar de Kit -->
@@ -445,11 +445,11 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                                                 <div class="grid grid-cols-1 md:grid-cols-3 gap-3 pr-6">
                                                     <div>
                                                         <label class="block text-[10px] font-semibold text-slate-400 uppercase">ID Estável (Node ID)</label>
-                                                        <input type="text" x-model="s.id" placeholder="ex: horst.procurement.whatsapp.primary" class="w-full text-xs font-mono border border-slate-700 rounded-md p-1.5 bg-slate-900 text-blue-400 focus:border-blue-500">
+                                                        <input type="text" x-model="s.id" placeholder="ex: example.procurement.messages.primary" class="w-full text-xs font-mono border border-slate-700 rounded-md p-1.5 bg-slate-900 text-blue-400 focus:border-blue-500">
                                                     </div>
                                                     <div>
                                                         <label class="block text-[10px] font-semibold text-slate-400 uppercase">Nome da Fonte</label>
-                                                        <input type="text" x-model="s.name" placeholder="ex: Horst - Compras (WhatsApp)" class="w-full text-xs border border-slate-700 rounded-md p-1.5 bg-slate-900 text-slate-200 focus:border-blue-500">
+                                                        <input type="text" x-model="s.name" placeholder="ex: Equipe - Compras (mensagens)" class="w-full text-xs border border-slate-700 rounded-md p-1.5 bg-slate-900 text-slate-200 focus:border-blue-500">
                                                     </div>
                                                     <div>
                                                         <label class="block text-[10px] font-semibold text-slate-400 uppercase">Propósito (Purpose)</label>
@@ -528,7 +528,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                                                 </div>
 
                                                 <div>
-                                                    <label class="block text-[10px] font-semibold text-slate-400 uppercase">Diretriz de Consulta (Guidance para Agentes HorstAI)</label>
+                                                    <label class="block text-[10px] font-semibold text-slate-400 uppercase">Diretriz de Consulta (Guidance para Agentes)</label>
                                                     <textarea x-model="s.guidance" rows="2" placeholder="Instruções claras para os agentes..." class="w-full text-xs border border-slate-700 rounded-md p-1.5 bg-slate-900 text-slate-200 focus:border-blue-500"></textarea>
                                                 </div>
                                             </div>
@@ -538,7 +538,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                                             <div class="p-8 text-center border border-dashed border-slate-800 rounded-2xl bg-slate-900/30">
                                                 <i class="fa-solid fa-book-atlas text-2xl text-slate-600 mb-2"></i>
                                                 <h4 class="text-sm font-semibold text-slate-300">Nenhuma Fonte Cadastrada nesta Instância</h4>
-                                                <p class="text-xs text-slate-500 mt-1 max-w-sm mx-auto">Adicione nós operacionais para guiar os agentes HorstAI onde localizar cada documento ou grupo.</p>
+                                                <p class="text-xs text-slate-500 mt-1 max-w-sm mx-auto">Adicione nós operacionais para guiar os agentes sobre onde localizar cada documento ou grupo.</p>
                                                 <button @click="addSourceItem()" class="mt-4 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-xs inline-flex items-center gap-1.5">
                                                     <i class="fa-solid fa-plus"></i> Adicionar Primeira Fonte
                                                 </button>
@@ -603,11 +603,9 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                                             <div class="p-3 rounded-xl border border-slate-750 bg-slate-950/60 flex items-center justify-between shadow-xs">
                                                 <div>
                                                     <span class="text-xs font-semibold text-slate-200 block" x-text="t.label || 'Token'"></span>
-                                                    <code class="text-xs font-mono text-emerald-400" x-text="t.token"></code>
+                                                    <code class="text-xs font-mono text-emerald-400" x-text="t.token_hint || 'token protegido'"></code>
                                                 </div>
-                                                <button @click="copyText(t.token, 'Token copiado!')" class="text-xs text-blue-400 hover:text-blue-300 font-medium px-2 py-1">
-                                                    Copiar Token
-                                                </button>
+                                                <span class="text-[10px] text-slate-500 px-2 py-1">valor exibido somente na emissão</span>
                                             </div>
                                         </template>
                                     </div>
@@ -923,11 +921,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                                             </span>
                                         </td>
                                         <td class="p-3.5 text-slate-400 font-mono" x-text="formatDate(u.created_at)"></td>
-                                        <td class="p-3.5 text-right">
-                                            <button @click="switchUserAccount(u.username)" class="text-xs text-blue-400 hover:text-blue-300 font-semibold">
-                                                Alternar para este Usuário
-                                            </button>
-                                        </td>
+                                        <td class="p-3.5 text-right text-xs text-slate-500">Gerenciado por credenciais próprias</td>
                                     </tr>
                                 </template>
                             </tbody>
@@ -1226,32 +1220,6 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     </div>
 
     <!-- Modal 3: Troca Rápida de Usuário & Sessão -->
-    <div x-show="showUserModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4" @click.self="showUserModal = false">
-        <div class="bg-slate-900 rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-slate-750 text-slate-100 space-y-4">
-            <div class="flex items-center justify-between pb-2 border-b border-slate-800">
-                <h3 class="text-sm font-bold text-slate-100 flex items-center gap-2">
-                    <i class="fa-solid fa-users text-blue-500"></i> Alternar Usuário Ativo
-                </h3>
-                <button @click="showUserModal = false" class="text-slate-400 hover:text-slate-200"><i class="fa-solid fa-xmark"></i></button>
-            </div>
-            <div class="space-y-2">
-                <template x-for="u in usersList" :key="u.id">
-                    <div @click="switchUserAccount(u.username); showUserModal = false" 
-                         :class="currentUser.username === u.username ? 'bg-blue-950/50 border-blue-600' : 'hover:bg-slate-800/60 border-slate-750 bg-slate-950/40'"
-                         class="p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all">
-                        <div>
-                            <span class="text-xs font-bold text-slate-100" x-text="u.display_name || u.username"></span>
-                            <span class="text-[11px] text-slate-400 block font-mono" x-text="'@' + u.username"></span>
-                        </div>
-                        <template x-if="u.role === 'epy_root'">
-                            <span class="text-amber-400 text-xs font-bold" title="Master Admin"><i class="fa-solid fa-crown"></i></span>
-                        </template>
-                    </div>
-                </template>
-            </div>
-        </div>
-    </div>
-
     <!-- Modal 4: Criar Novo Usuário -->
     <div x-show="showCreateUserModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4" @click.self="showCreateUserModal = false">
         <div class="bg-slate-900 rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-slate-750 text-slate-100 space-y-4">
@@ -1425,9 +1393,6 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 <button @click="authTab = 'register'" :class="authTab === 'register' ? 'bg-slate-800 text-slate-100 shadow-xs' : 'text-slate-400 hover:text-slate-200'" class="flex-1 py-1.5 rounded-lg transition-all text-center">
                     Criar Conta
                 </button>
-                <button @click="authTab = 'switch'" :class="authTab === 'switch' ? 'bg-slate-800 text-slate-100 shadow-xs' : 'text-slate-400 hover:text-slate-200'" class="flex-1 py-1.5 rounded-lg transition-all text-center">
-                    Alternar
-                </button>
             </div>
 
             <!-- Aba 1: Entrar (Login) -->
@@ -1491,23 +1456,6 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 <button @click="submitRegister()" class="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors">
                     Solicitar Cadastro
                 </button>
-            </div>
-
-            <!-- Aba 3: Alternar Usuário Rápido (Dev) -->
-            <div x-show="authTab === 'switch'" class="space-y-2 max-h-60 overflow-y-auto">
-                <template x-for="u in usersList" :key="u.id">
-                    <div @click="switchUserAccount(u.username); showAuthModal = false" 
-                         :class="currentUser.username === u.username ? 'bg-blue-950/50 border-blue-600' : 'hover:bg-slate-800/60 border-slate-750 bg-slate-950/40'"
-                         class="p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all">
-                        <div>
-                            <span class="text-xs font-bold text-slate-100" x-text="u.display_name || u.username"></span>
-                            <span class="text-[11px] text-slate-400 block font-mono" x-text="'@' + u.username"></span>
-                        </div>
-                        <template x-if="u.role === 'epy_root'">
-                            <span class="text-amber-400 text-xs font-bold" title="Master Admin"><i class="fa-solid fa-crown"></i></span>
-                        </template>
-                    </div>
-                </template>
             </div>
 
             <template x-if="currentUser.username">
@@ -1706,11 +1654,11 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                                 <div class="grid grid-cols-1 md:grid-cols-3 gap-2 pr-6">
                                     <div>
                                         <label class="block text-[10px] text-slate-400 uppercase font-semibold">ID do Nó</label>
-                                        <input type="text" x-model="s.id" placeholder="ex: horst.compras.wa" class="w-full text-xs font-mono border border-slate-700 rounded p-1.5 bg-slate-900 text-blue-400">
+                                        <input type="text" x-model="s.id" placeholder="ex: example.procurement.messages" class="w-full text-xs font-mono border border-slate-700 rounded p-1.5 bg-slate-900 text-blue-400">
                                     </div>
                                     <div>
                                         <label class="block text-[10px] text-slate-400 uppercase font-semibold">Nome da Fonte</label>
-                                        <input type="text" x-model="s.name" placeholder="ex: Horst - Compras" class="w-full text-xs border border-slate-700 rounded p-1.5 bg-slate-900 text-slate-100">
+                                        <input type="text" x-model="s.name" placeholder="ex: Equipe - Compras" class="w-full text-xs border border-slate-700 rounded p-1.5 bg-slate-900 text-slate-100">
                                     </div>
                                     <div>
                                         <label class="block text-[10px] text-slate-400 uppercase font-semibold">Propósito (Purpose)</label>
@@ -1829,11 +1777,11 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                                 <div class="grid grid-cols-1 md:grid-cols-3 gap-2 pr-6">
                                     <div>
                                         <label class="block text-[10px] text-slate-400 uppercase font-semibold">ID do Nó</label>
-                                        <input type="text" x-model="s.id" placeholder="ex: horst.compras.wa" class="w-full text-xs font-mono border border-slate-700 rounded p-1.5 bg-slate-900 text-blue-400">
+                                        <input type="text" x-model="s.id" placeholder="ex: example.procurement.messages" class="w-full text-xs font-mono border border-slate-700 rounded p-1.5 bg-slate-900 text-blue-400">
                                     </div>
                                     <div>
                                         <label class="block text-[10px] text-slate-400 uppercase font-semibold">Nome da Fonte</label>
-                                        <input type="text" x-model="s.name" placeholder="ex: Horst - Compras" class="w-full text-xs border border-slate-700 rounded p-1.5 bg-slate-900 text-slate-100">
+                                        <input type="text" x-model="s.name" placeholder="ex: Equipe - Compras" class="w-full text-xs border border-slate-700 rounded p-1.5 bg-slate-900 text-slate-100">
                                     </div>
                                     <div>
                                         <label class="block text-[10px] text-slate-400 uppercase font-semibold">Propósito (Purpose)</label>
@@ -1998,11 +1946,11 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     <div class="space-y-3 p-3.5 bg-slate-950/60 rounded-xl border border-slate-800">
                         <div class="flex items-center justify-between">
                             <span class="text-[11px] font-bold text-slate-300 uppercase tracking-wider"><i class="fa-solid fa-terminal text-blue-400 mr-1"></i> Configuração Stdio</span>
-                            <span class="text-[10px] text-slate-500">Homologados: npx, python, uv, uvx, node</span>
+                            <span class="text-[10px] text-slate-500">Permitido: npx com pacote e versão exata da allowlist</span>
                         </div>
                         <div>
                             <label class="block text-xs font-medium text-slate-300 mb-1">Comando Executável *</label>
-                            <input type="text" x-model="newConnectionForm.command" placeholder="Ex: npx, python, uvx" class="w-full text-xs border border-slate-700 rounded-lg p-2 font-mono bg-slate-900 text-slate-100 placeholder-slate-600 focus:border-blue-500">
+                            <input type="text" x-model="newConnectionForm.command" placeholder="Ex: npx" class="w-full text-xs border border-slate-700 rounded-lg p-2 font-mono bg-slate-900 text-slate-100 placeholder-slate-600 focus:border-blue-500">
                         </div>
                         <div>
                             <label class="block text-xs font-medium text-slate-300 mb-1">Argumentos (separados por espaço ou array JSON)</label>
@@ -2114,6 +2062,21 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             </div>
         </div>
     </div>
+    <!-- Modal: segredo emitido uma única vez -->
+    <div x-show="showIssuedTokenModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4" @click.self="closeIssuedTokenModal()">
+        <div class="bg-slate-900 rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-amber-700/50 text-slate-100 space-y-4">
+            <div>
+                <h3 class="text-sm font-bold text-amber-300">Salve este token agora</h3>
+                <p class="text-xs text-slate-400 mt-1">O valor não será armazenado em texto simples nem exibido novamente.</p>
+            </div>
+            <code class="block break-all rounded-lg border border-slate-700 bg-slate-950 p-3 text-xs text-emerald-400" x-text="issuedToken"></code>
+            <div class="flex justify-end gap-2">
+                <button @click="copyText(issuedToken, 'Token copiado!')" class="px-3 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-xs font-semibold">Copiar token</button>
+                <button @click="closeIssuedTokenModal()" class="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-xs font-semibold">Já salvei</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         function centralApp() {
             return {
@@ -2127,12 +2090,14 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 govSubTab: 'users',
                 visibilityFilter: 'all',
                 loading: false,
-                adminKey: localStorage.getItem('central_admin_key') || '',
-                sessionToken: localStorage.getItem('central_session_token') || '',
+                adminKey: '',
+                sessionToken: '',
                 showAuthModal: false,
                 showUserModal: false,
                 showCreateUserModal: false,
                 showCreateInstanceModal: false,
+                showIssuedTokenModal: false,
+                issuedToken: '',
                 showTemplateModal: false,
                 showSaveAsTemplateModal: false,
                 showSaveAsKitModal: false,
@@ -2223,6 +2188,15 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     navigator.clipboard.writeText(text);
                     this.showToast(label || 'Copiado para a área de transferência!', 'success');
                 },
+                presentIssuedToken(token) {
+                    if (!token) return;
+                    this.issuedToken = token;
+                    this.showIssuedTokenModal = true;
+                },
+                closeIssuedTokenModal() {
+                    this.showIssuedTokenModal = false;
+                    this.issuedToken = '';
+                },
 
                 switchMainTab(tab) {
                     this.activeTab = tab;
@@ -2296,7 +2270,6 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     const k = (this.authKeyInput || '').trim();
                     if (k) {
                         this.adminKey = k;
-                        localStorage.setItem('central_admin_key', k);
                         this.showAuthModal = false;
                         this.refreshAll();
                     }
@@ -2309,11 +2282,6 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                         this.authTab = 'register';
                         this.registerForm.invite_code = qInvite.trim();
                         this.showAuthModal = true;
-                    }
-                    const qKey = params.get('admin_key');
-                    if (qKey) {
-                        this.adminKey = qKey.trim();
-                        localStorage.setItem('central_admin_key', this.adminKey);
                     }
                     if (!this.adminKey && !this.sessionToken && !qInvite) {
                         this.showAuthModal = true;
@@ -2672,7 +2640,6 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                         if (res && res.ok) {
                             const data = await res.json();
                             this.sessionToken = data.token;
-                            localStorage.setItem('central_session_token', data.token);
                             this.showAuthModal = false;
                             this.showToast(`Bem-vindo, ${data.user.display_name || data.user.username}!`, 'success');
                             await this.fetchMe();
@@ -2701,7 +2668,6 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                         if (res && res.ok) {
                             if (data.status === 'approved' && data.token) {
                                 this.sessionToken = data.token;
-                                localStorage.setItem('central_session_token', data.token);
                                 this.showAuthModal = false;
                                 this.showToast('Conta ativada com sucesso pelo convite!', 'success');
                                 await this.fetchMe();
@@ -2723,8 +2689,6 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     try {
                         await this.apiFetch('/api/v1/auth/logout', { method: 'POST' });
                     } catch (e) {}
-                    localStorage.removeItem('central_session_token');
-                    localStorage.removeItem('central_admin_key');
                     this.sessionToken = '';
                     this.adminKey = '';
                     this.currentUser = { username: '', role: 'standard', display_name: '', is_master_admin: false };
@@ -2830,7 +2794,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
                 addSourceItem() {
                     if (!this.sourcesMapData) {
-                        this.sourcesMapData = { organization: (this.currentInstanceDetail ? this.currentInstanceDetail.name : 'Horst Group'), sources: [] };
+                        this.sourcesMapData = { organization: (this.currentInstanceDetail ? this.currentInstanceDetail.name : 'Example Organization'), sources: [] };
                     }
                     if (!Array.isArray(this.sourcesMapData.sources)) {
                         this.sourcesMapData.sources = [];
@@ -3002,6 +2966,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                             const data = await res.json();
                             this.showCreateInstanceModal = false;
                             this.showToast(`Instância "${this.newInstanceForm.name}" criada com sucesso!`, 'success');
+                            this.presentIssuedToken(data.token);
                             this.newInstanceForm = { name: '', slug: '', description: '', visibility: 'shared' };
                             await this.fetchInstances();
                             this.selectInstance(data.slug);
@@ -3040,7 +3005,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                             body: JSON.stringify({
                                 template_id: this.selectedTemplate.id,
                                 form_values: this.templateFormValues,
-                                target_instance_slug: this.templateTargetInstanceSlug || 'horst-suite'
+                                target_instance_slug: this.templateTargetInstanceSlug || 'demo-suite'
                             })
                         });
                         if (res && res.ok) {
@@ -3279,31 +3244,13 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                             body: JSON.stringify({ label: 'Token Adicional' })
                         });
                         if (res && res.ok) {
+                            const data = await res.json();
+                            this.presentIssuedToken(data.token);
                             this.showToast('Novo token gerado com sucesso!', 'success');
                             await this.selectInstance(this.currentInstanceDetail.slug);
                         }
                     } catch (e) {
                         this.showToast('Erro ao gerar token.', 'error');
-                    }
-                },
-
-                async switchUserAccount(username) {
-                    try {
-                        const res = await this.apiFetch('/api/v1/auth/switch-user', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ username: username })
-                        });
-                        if (res && res.ok) {
-                            const data = await res.json();
-                            this.sessionToken = data.token;
-                            localStorage.setItem('central_session_token', data.token);
-                            this.showToast(`Sessão alterada para ${username}!`, 'info');
-                            await this.fetchMe();
-                            await this.refreshAll();
-                        }
-                    } catch (e) {
-                        this.showToast('Erro ao alternar usuário.', 'error');
                     }
                 },
 
@@ -3327,7 +3274,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 },
 
                 async applyKitToPrompt(kitId) {
-                    const target = prompt('Informe o slug da instância de destino (ex: horst-suite):', 'horst-suite');
+                    const target = prompt('Informe o slug da instância de destino (ex: demo-suite):', 'demo-suite');
                     if (!target) return;
                     try {
                         const res = await this.apiFetch(`/api/v1/data-source-kits/${kitId}/apply`, {
@@ -3656,11 +3603,11 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     }
                 },
 
-                getEndpointUrl(slug, token) {
+                getEndpointUrl(slug) {
                     const loc = window.location;
                     const proto = loc.protocol;
                     const host = loc.host;
-                    return `${proto}//${host}/mcp/${slug || 'default'}/sse?token=${token || 'seu_token'}`;
+                    return `${proto}//${host}/mcp/${slug || 'default'}/sse`;
                 },
 
                 formatDate(isoString) {

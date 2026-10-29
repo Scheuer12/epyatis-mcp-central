@@ -104,16 +104,19 @@ class CentralRepository:
         db.add(instance)
         db.flush()
 
-        # Adiciona um token inicial por padrão
-        token_str = f"epy_{slug}_{secrets.token_hex(4)}"
+        # Issue a high-entropy token once; only its digest is persisted.
+        from central.security.tokens import hash_bearer_token
+
+        token_str = f"epy_{secrets.token_urlsafe(32)}"
         token = InstanceTokenEntity(
             instance_id=instance.id,
-            token=token_str,
+            token=hash_bearer_token(token_str),
             label="Default Token",
         )
         db.add(token)
         db.commit()
         db.refresh(instance)
+        instance.issued_token = token_str
         return instance
 
     @staticmethod
@@ -833,9 +836,11 @@ class CentralRepository:
 
     @staticmethod
     def create_session(db: Session, user_id: str, token: str, expires_at: datetime | None = None) -> UserSessionEntity:
+        from central.security.tokens import hash_bearer_token
+
         session = UserSessionEntity(
             user_id=user_id,
-            token=token,
+            token=hash_bearer_token(token),
             expires_at=expires_at,
         )
         db.add(session)
@@ -845,11 +850,15 @@ class CentralRepository:
 
     @staticmethod
     def get_session_by_token(db: Session, token: str) -> UserSessionEntity | None:
-        return db.query(UserSessionEntity).filter(UserSessionEntity.token == token).first()
+        from central.security.tokens import hash_bearer_token
+
+        return db.query(UserSessionEntity).filter(
+            UserSessionEntity.token == hash_bearer_token(token)
+        ).first()
 
     @staticmethod
     def delete_session(db: Session, token: str) -> bool:
-        session = db.query(UserSessionEntity).filter(UserSessionEntity.token == token).first()
+        session = CentralRepository.get_session_by_token(db, token)
         if session:
             db.delete(session)
             db.commit()
