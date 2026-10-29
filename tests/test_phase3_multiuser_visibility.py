@@ -216,12 +216,12 @@ async def test_data_source_kit_and_application():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         headers = {"X-Central-Admin-Key": settings.CENTRAL_ADMIN_KEY}
 
-        # 1. Salva data sources da instância horst-suite como um Kit
+        # 1. Salva data sources da instância exampleco-suite como um Kit
         kit_res = await client.post(
-            "/api/v1/instances/horst-suite/save-as-kit",
+            "/api/v1/instances/exampleco-suite/save-as-kit",
             headers=headers,
             json={
-                "name": "Kit Operações Horst Padrão",
+                "name": "Kit Operações ExampleCo Padrão",
                 "category": "Operações",
                 "description": "Kit oficial com Drive e Periskope",
                 "visibility": "shared",

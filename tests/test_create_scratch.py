@@ -53,7 +53,7 @@ async def test_create_connection_scratch_stdio():
 
 @pytest.mark.asyncio
 async def test_create_connection_scratch_remote_and_attach():
-    """Cria conexão remota (remote_mcp) e vincula à instância horst-suite."""
+    """Cria conexão remota (remote_mcp) e vincula à instância exampleco-suite."""
     headers = {"X-Central-Admin-Key": settings.CENTRAL_ADMIN_KEY}
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test", headers=headers) as client:
@@ -69,22 +69,22 @@ async def test_create_connection_scratch_remote_and_attach():
         res = await client.post("/api/v1/connections", json=payload)
         assert res.status_code == 200, res.text
 
-        # Vincula à instância horst-suite
+        # Vincula à instância exampleco-suite
         attach_res = await client.post(
-            "/api/v1/instances/horst-suite/connections",
+            "/api/v1/instances/exampleco-suite/connections",
             json={"connection_id": "scratch-remote-api"},
         )
         assert attach_res.status_code == 200, attach_res.text
 
         # Verifica na instância
-        inst_res = await client.get("/api/v1/instances/horst-suite")
+        inst_res = await client.get("/api/v1/instances/exampleco-suite")
         assert inst_res.status_code == 200
         inst_data = inst_res.json()
         attached_ids = [c["id"] for c in inst_data.get("connections", [])]
         assert "scratch-remote-api" in attached_ids
 
         # Desvincula e remove para limpeza
-        await client.delete("/api/v1/instances/horst-suite/connections/scratch-remote-api")
+        await client.delete("/api/v1/instances/exampleco-suite/connections/scratch-remote-api")
         await client.delete("/api/v1/connections/scratch-remote-api")
 
 

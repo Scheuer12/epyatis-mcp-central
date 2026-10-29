@@ -18,8 +18,8 @@ async def test_instance_loading_and_internal_tools():
     gateway_manager.load_config(settings.CONFIG_PATH)
     await gateway_manager.start_all()
 
-    gateway = gateway_manager.get_instance("horst-suite")
-    assert gateway is not None, "Instância 'horst-suite' deve estar carregada."
+    gateway = gateway_manager.get_instance("exampleco-suite")
+    assert gateway is not None, "Instância 'exampleco-suite' deve estar carregada."
 
     # 2. Testa validação de tokens
     assert gateway.validate_token("epy_dev_token_123") is True
@@ -45,7 +45,7 @@ async def test_instance_loading_and_internal_tools():
     map_result = await gateway._handle_call_tool(None, map_params)
     assert not map_result.is_error
     map_data = json.loads(map_result.content[0].text)
-    assert map_data["organization"] == "Horst Group"
+    assert map_data["organization"] == "ExampleCo Group"
     assert len(map_data["sources"]) >= 2
     print(f"[Test] Data sources map recuperado com sucesso para: {map_data['organization']}")
 
@@ -60,5 +60,5 @@ async def test_api_health_endpoint():
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "healthy"
-        assert "horst-suite" in data["instances"]
+        assert "exampleco-suite" in data["instances"]
         print(f"[Test] Healthcheck status: {data}")

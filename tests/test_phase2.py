@@ -125,7 +125,7 @@ async def test_create_connection_from_template_api():
                 "prefix": "fstest",
                 "allowed_dir": "C:\\Users\\Scheuer\\Documents",
             },
-            "target_instance_slug": "horst-suite",
+            "target_instance_slug": "exampleco-suite",
         }
         res = await client.post("/api/v1/connections/from-template", json=payload)
         assert res.status_code == 200
@@ -144,7 +144,7 @@ async def test_create_connection_from_template_api():
 @pytest.mark.asyncio
 async def test_granular_tool_filtering_and_toggles():
     await gateway_manager.start_all()
-    gateway = gateway_manager.get_instance("horst-suite")
+    gateway = gateway_manager.get_instance("exampleco-suite")
     assert gateway is not None
 
     # 1. Lista tools inicialmente: central__ping deve estar presente
@@ -157,14 +157,14 @@ async def test_granular_tool_filtering_and_toggles():
     headers = {"X-Central-Admin-Key": settings.CENTRAL_ADMIN_KEY}
     async with AsyncClient(transport=transport, base_url="http://test", headers=headers) as client:
         res = await client.post(
-            "/api/v1/instances/horst-suite/tools/central__ping/toggle",
+            "/api/v1/instances/exampleco-suite/tools/central__ping/toggle",
             json={"is_enabled": False},
         )
         assert res.status_code == 200
         assert res.json()["is_enabled"] is False
 
     # 3. Recarrega gateway e verifica que central__ping foi OMITIDA da lista
-    gateway = gateway_manager.get_instance("horst-suite")
+    gateway = gateway_manager.get_instance("exampleco-suite")
     tools_after = await gateway._handle_list_tools(None)
     names_after = [t.name for t in tools_after.tools]
     assert "central__ping" not in names_after
@@ -179,12 +179,12 @@ async def test_granular_tool_filtering_and_toggles():
     # 5. Re-habilita a ferramenta
     async with AsyncClient(transport=transport, base_url="http://test", headers=headers) as client:
         res = await client.post(
-            "/api/v1/instances/horst-suite/tools/central__ping/toggle",
+            "/api/v1/instances/exampleco-suite/tools/central__ping/toggle",
             json={"is_enabled": True},
         )
         assert res.status_code == 200
 
-    gateway = gateway_manager.get_instance("horst-suite")
+    gateway = gateway_manager.get_instance("exampleco-suite")
     tools_restored = await gateway._handle_list_tools(None)
     names_restored = [t.name for t in tools_restored.tools]
     assert "central__ping" in names_restored
@@ -196,10 +196,10 @@ async def test_data_sources_map_editor_and_agent_sync():
     headers = {"X-Central-Admin-Key": settings.CENTRAL_ADMIN_KEY}
     async with AsyncClient(transport=transport, base_url="http://test", headers=headers) as client:
         # 1. Consulta mapa atual
-        res = await client.get("/api/v1/instances/horst-suite/sources-map")
+        res = await client.get("/api/v1/instances/exampleco-suite/sources-map")
         assert res.status_code == 200
         curr_map = res.json()
-        assert "Horst" in curr_map["organization"]
+        assert "ExampleCo" in curr_map["organization"]
 
         # 2. Atualiza com uma nova fonte de dados corporativa
         new_sources = list(curr_map.get("sources", []))
@@ -212,24 +212,24 @@ async def test_data_sources_map_editor_and_agent_sync():
         })
 
         update_payload = {
-            "organization": "Horst Group Holding",
+            "organization": "ExampleCo Group Holding",
             "sources": new_sources,
         }
-        put_res = await client.put("/api/v1/instances/horst-suite/sources-map", json=update_payload)
+        put_res = await client.put("/api/v1/instances/exampleco-suite/sources-map", json=update_payload)
         assert put_res.status_code == 200
 
     # 3. Invoca a tool central__get_data_sources_map via MCP e verifica o novo dado
-    gateway = gateway_manager.get_instance("horst-suite")
+    gateway = gateway_manager.get_instance("exampleco-suite")
     import mcp.types as types
     call_params = types.CallToolRequestParams(name="central__get_data_sources_map", arguments={})
     result = await gateway._handle_call_tool(None, call_params)
     assert not result.is_error
     map_data = json.loads(result.content[0].text)
-    assert map_data["organization"] == "Horst Group Holding"
+    assert map_data["organization"] == "ExampleCo Group Holding"
     assert any(s["system"] == "sap_erp" for s in map_data["sources"])
 
     # 4. Restaura mapa original
     async with AsyncClient(transport=transport, base_url="http://test", headers=headers) as client:
-        await client.put("/api/v1/instances/horst-suite/sources-map", json=curr_map)
+        await client.put("/api/v1/instances/exampleco-suite/sources-map", json=curr_map)
 
 
