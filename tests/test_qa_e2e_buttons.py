@@ -74,7 +74,7 @@ async def test_qa_02_health_check():
         data = res.json()
         assert data["status"] == "healthy"
         assert "instances" in data
-        assert "horst-suite" in data["instances"]
+        assert "exampleco-suite" in data["instances"]
 
 
 @pytest.mark.asyncio
@@ -152,10 +152,10 @@ async def test_qa_07_instances_tab_and_tokens():
         assert res.status_code == 200
         instances = res.json()
         assert len(instances) >= 1
-        horst = next((i for i in instances if i["slug"] == "horst-suite"), None)
-        assert horst is not None
-        assert len(horst["tokens"]) >= 1
-        assert horst["tokens"][0]["token"] is not None
+        exampleco = next((i for i in instances if i["slug"] == "exampleco-suite"), None)
+        assert exampleco is not None
+        assert len(exampleco["tokens"]) >= 1
+        assert exampleco["tokens"][0]["token"] is not None
 
 
 @pytest.mark.asyncio
@@ -199,7 +199,7 @@ paths:
           description: A list of pets
             """,
         },
-        "target_instance_slug": "horst-suite",
+        "target_instance_slug": "exampleco-suite",
     }
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers={"X-Central-Admin-Key": settings.CENTRAL_ADMIN_KEY}) as client:
 
@@ -222,7 +222,7 @@ async def test_qa_10_button_toggle_instance_tool():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers={"X-Central-Admin-Key": settings.CENTRAL_ADMIN_KEY}) as client:
 
         # 1. Busca tools da instância
-        res = await client.get("/api/v1/instances/horst-suite/tools")
+        res = await client.get("/api/v1/instances/exampleco-suite/tools")
         assert res.status_code == 200
         inst_tools = res.json()
         assert len(inst_tools) >= 1
@@ -233,7 +233,7 @@ async def test_qa_10_button_toggle_instance_tool():
 
         # 2. Desabilita a tool (ou inverte o estado)
         res_toggle = await client.post(
-            f"/api/v1/instances/horst-suite/tools/{target_id}/toggle",
+            f"/api/v1/instances/exampleco-suite/tools/{target_id}/toggle",
             json={"is_enabled": not original_state},
         )
         assert res_toggle.status_code == 200
@@ -242,7 +242,7 @@ async def test_qa_10_button_toggle_instance_tool():
 
         # 3. Restaura o estado original
         res_restore = await client.post(
-            f"/api/v1/instances/horst-suite/tools/{target_id}/toggle",
+            f"/api/v1/instances/exampleco-suite/tools/{target_id}/toggle",
             json={"is_enabled": original_state},
         )
         assert res_restore.status_code == 200
@@ -256,13 +256,13 @@ async def test_qa_11_button_sources_map_editor():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers={"X-Central-Admin-Key": settings.CENTRAL_ADMIN_KEY}) as client:
 
         # 1. Carrega dados atuais
-        res_get = await client.get("/api/v1/instances/horst-suite/sources-map")
+        res_get = await client.get("/api/v1/instances/exampleco-suite/sources-map")
         assert res_get.status_code == 200
         current_map = res_get.json()
 
         # 2. Atualiza com uma nova fonte de teste de QA
         test_update = {
-            "organization": "Horst QA Automation",
+            "organization": "ExampleCo QA Automation",
             "sources": [
                 {
                     "name": "Diretrizes de QA",
@@ -271,15 +271,15 @@ async def test_qa_11_button_sources_map_editor():
                 }
             ],
         }
-        res_put = await client.put("/api/v1/instances/horst-suite/sources-map", json=test_update)
+        res_put = await client.put("/api/v1/instances/exampleco-suite/sources-map", json=test_update)
         assert res_put.status_code == 200
-        res_check = await client.get("/api/v1/instances/horst-suite/sources-map")
+        res_check = await client.get("/api/v1/instances/exampleco-suite/sources-map")
         assert res_check.status_code == 200
         saved = res_check.json()
-        assert saved["organization"] == "Horst QA Automation"
+        assert saved["organization"] == "ExampleCo QA Automation"
 
         # 3. Restaura o mapa anterior para manter consistência
-        res_restore = await client.put("/api/v1/instances/horst-suite/sources-map", json=current_map)
+        res_restore = await client.put("/api/v1/instances/exampleco-suite/sources-map", json=current_map)
         assert res_restore.status_code == 200
 
 
@@ -288,7 +288,7 @@ async def test_qa_12_button_reload_instance():
     """Valida botão 'Recarregar Instância'."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers={"X-Central-Admin-Key": settings.CENTRAL_ADMIN_KEY}) as client:
 
-        res = await client.post("/api/v1/instances/horst-suite/reload")
+        res = await client.post("/api/v1/instances/exampleco-suite/reload")
         assert res.status_code == 200
         data = res.json()
         assert "status" in data
@@ -305,7 +305,7 @@ async def test_qa_13_audit_logs_history():
         logs = res.json()
         assert isinstance(logs, list)
 
-        res_inst = await client.get("/api/v1/instances/horst-suite/audit-logs?limit=10")
+        res_inst = await client.get("/api/v1/instances/exampleco-suite/audit-logs?limit=10")
         assert res_inst.status_code == 200
         inst_logs = res_inst.json()
         assert isinstance(inst_logs, list)
@@ -314,7 +314,7 @@ async def test_qa_13_audit_logs_history():
 @pytest.mark.asyncio
 async def test_qa_14_mcp_protocol_live_tool_call():
     """Valida protocolo MCP real via gateway_manager (list_tools e call_tool com gravação de auditoria)."""
-    gw = gateway_manager.get_instance("horst-suite")
+    gw = gateway_manager.get_instance("exampleco-suite")
     assert gw is not None
 
     # 1. Lista tools pelo protocolo MCP
@@ -334,5 +334,5 @@ async def test_qa_14_mcp_protocol_live_tool_call():
     # 3. Chama a tool central__get_data_sources_map
     map_res = await gw._handle_call_tool(None, types.CallToolRequestParams(name="central__get_data_sources_map", arguments={}))
     assert map_res.is_error is False
-    assert "Fontes de Dados" in map_res.content[0].text or "Horst" in map_res.content[0].text
+    assert "Fontes de Dados" in map_res.content[0].text or "ExampleCo" in map_res.content[0].text
 

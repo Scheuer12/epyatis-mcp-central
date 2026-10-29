@@ -1,0 +1,67 @@
+name: Bug report
+description: Report a reproducible defect using synthetic data.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Epyatis MCP Central. Do not include credentials, private data or vulnerability details. Use SECURITY.md for suspected vulnerabilities.
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: Commit SHA, branch or package version where the problem occurs.
+      placeholder: 0.2.0.dev1 or commit SHA
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Operating system, Python version and relevant client version.
+      placeholder: Windows 11, Python 3.13, client/version
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Provide the smallest safe reproduction using disposable data and synthetic credentials.
+      placeholder: |
+        1. Configure ...
+        2. Run ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized logs or evidence
+      description: Remove tokens, keys, URLs containing secrets and personal/customer data.
+      render: shell
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues and known limitations.
+          required: true
+        - label: This report contains no secrets or private data.
+          required: true
+        - label: This is not a sensitive vulnerability report.
+          required: true
+        - label: I agree to follow the Code of Conduct.
+          required: true
+

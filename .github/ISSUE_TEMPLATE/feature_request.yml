@@ -1,0 +1,48 @@
+name: Feature or architecture proposal
+description: Propose an improvement grounded in a concrete problem.
+title: "[Proposal]: "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user, operator or contributor problem needs to be solved? Include evidence when available.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed outcome
+      description: Describe the desired behavior and acceptance criteria without over-prescribing implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Include a simpler or non-agentic alternative when relevant.
+  - type: textarea
+    id: risks
+    attributes:
+      label: Security, compatibility and operational impact
+      description: Consider authentication, authorization, secrets, networking, subprocesses, persistence and migration.
+  - type: dropdown
+    id: contribution
+    attributes:
+      label: Contribution intent
+      options:
+        - I can implement this with maintainer guidance
+        - I can help test or document it
+        - I am proposing it for discussion only
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues and the roadmap.
+          required: true
+        - label: I agree to follow the Code of Conduct.
+          required: true
+

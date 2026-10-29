@@ -41,7 +41,19 @@ client_secret*.json
 *.db
 *.db-shm
 *.db-wal
+backups/
 
 # IDEs
 .vscode/
 .idea/
+
+# Test, audit, and build artifacts
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+junit.xml
+sbom*.json
+bandit*.json

@@ -137,15 +137,15 @@ async def test_edit_kit_and_instance_lifecycle():
         assert del_kit_res.status_code == 200
 
         # 5. Edita Instância (PUT /instances/{slug})
-        inst_res = await client.put("/api/v1/instances/horst-suite", json={
-            "name": "Horst Operational Suite (Editada)",
+        inst_res = await client.put("/api/v1/instances/exampleco-suite", json={
+            "name": "ExampleCo Operational Suite (Editada)",
             "description": "Nova descrição para testes de edição UX"
         })
         assert inst_res.status_code == 200
-        assert inst_res.json()["name"] == "Horst Operational Suite (Editada)"
+        assert inst_res.json()["name"] == "ExampleCo Operational Suite (Editada)"
 
         # Restaura nome original
-        await client.put("/api/v1/instances/horst-suite", json={
-            "name": "Horst Operational Suite",
-            "description": "Endpoint agregador de operações com Google Drive e Periskope WhatsApp para a Horst Group."
+        await client.put("/api/v1/instances/exampleco-suite", json={
+            "name": "ExampleCo Operational Suite",
+            "description": "Endpoint agregador de operações com Google Drive e Periskope WhatsApp para a ExampleCo Group."
         })

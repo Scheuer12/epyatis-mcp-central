@@ -1,27 +1,53 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools==80.10.2"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "epyatis-mcp-central"
-version = "0.1.0.dev0"
-description = "Centralized MCP gateway and management platform"
+version = "0.2.0.dev1"
+description = "Open-source control plane for governed MCP and OpenAPI tool endpoints"
+readme = "README.md"
+license = "MIT"
 authors = [{ name = "Epyatis" }]
 requires-python = ">=3.11"
-dependencies = [
-    "fastapi>=0.115.0",
-    "uvicorn[standard]>=0.32.0",
-    "httpx>=0.28.0",
-    "pydantic>=2.10.0",
-    "pydantic-settings>=2.7.0",
-    "pyyaml>=6.0.2",
-    "mcp>=1.1.2",
-    "cryptography>=44.0.0",
-    "python-dotenv>=1.0.1",
-    "sqlalchemy>=2.0.0",
-    "jinja2>=3.1.0",
-    "aiofiles>=24.1.0",
+keywords = ["mcp", "model-context-protocol", "ai-agents", "gateway", "openapi"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Framework :: FastAPI",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
 ]
+dependencies = [
+    "fastapi==0.143.3",
+    "uvicorn[standard]==0.54.0",
+    "httpx==0.28.1",
+    "pydantic==2.14.1",
+    "pydantic-settings==2.16.0",
+    "PyYAML==6.0.3",
+    "mcp==2.3.0",
+    "cryptography==50.0.2",
+    "python-dotenv==1.2.4",
+    "SQLAlchemy==2.1.5",
+    "Jinja2==3.1.6",
+    "aiofiles==25.1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/Scheuer12/epyatis-mcp-central"
+Repository = "https://github.com/Scheuer12/epyatis-mcp-central"
+Issues = "https://github.com/Scheuer12/epyatis-mcp-central/issues"
+Changelog = "https://github.com/Scheuer12/epyatis-mcp-central/blob/main/CHANGELOG.md"
+Security = "https://github.com/Scheuer12/epyatis-mcp-central/blob/main/SECURITY.md"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E9", "F63", "F7", "F82"]
 
 [project.scripts]
 epyatis-central = "central.main:run"

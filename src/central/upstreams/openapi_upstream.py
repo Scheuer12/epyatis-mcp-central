@@ -14,6 +14,7 @@ import yaml
 from central.upstreams.base import BaseUpstream
 
 logger = logging.getLogger(__name__)
+MAX_UPSTREAM_RESPONSE_BYTES = 2 * 1024 * 1024
 
 
 class OpenApiUpstream(BaseUpstream):
@@ -33,9 +34,23 @@ class OpenApiUpstream(BaseUpstream):
         self.operations: dict[str, dict[str, Any]] = {}
         self._http_client: httpx.AsyncClient | None = None
 
+    async def _request_limited(self, method: str, url: str, **kwargs: Any) -> tuple[httpx.Response, bytes]:
+        """Read an upstream response with a hard cap to avoid memory exhaustion."""
+        if not self._http_client:
+            raise RuntimeError("Cliente HTTP não inicializado.")
+        chunks: list[bytes] = []
+        size = 0
+        async with self._http_client.stream(method, url, **kwargs) as response:
+            async for chunk in response.aiter_bytes():
+                size += len(chunk)
+                if size > MAX_UPSTREAM_RESPONSE_BYTES:
+                    raise ValueError("Resposta do upstream excede o limite de 2 MiB.")
+                chunks.append(chunk)
+            return response, b"".join(chunks)
+
     async def start(self) -> None:
         logger.info(f"[{self.prefix}] Inicializando upstream OpenAPI...")
-        self._http_client = httpx.AsyncClient(timeout=30.0)
+        self._http_client = httpx.AsyncClient(timeout=30.0, follow_redirects=False, trust_env=False)
 
         # Carrega e parseia a especificação
         if isinstance(self.raw_spec, str):
@@ -46,9 +61,9 @@ class OpenApiUpstream(BaseUpstream):
                     logger.error(f"[{self.prefix}] Tentativa de download de OpenAPI bloqueada por SSRF: {reason}")
                     raise ValueError(f"URL de OpenAPI rejeitada por proteção anti-SSRF: {reason}")
 
-                resp = await self._http_client.get(self.raw_spec)
+                resp, body = await self._request_limited("GET", self.raw_spec)
                 resp.raise_for_status()
-                text = resp.text
+                text = body.decode(resp.encoding or "utf-8", errors="replace")
                 try:
                     self.parsed_spec = json.loads(text)
                 except Exception:
@@ -217,21 +232,26 @@ class OpenApiUpstream(BaseUpstream):
 
         full_url = f"{self.base_url.rstrip('/')}/{resolved_path.lstrip('/')}" if self.base_url else resolved_path
 
-        # Validação anti-SSRF para impedir que o agente acesse a máquina local ou rede interna
-        if full_url.startswith("http://") or full_url.startswith("https://"):
-            from central.security.ssrf import is_safe_external_url
-            is_safe, reason = is_safe_external_url(full_url)
-            if not is_safe:
-                logger.error(f"[{self.prefix}] Chamada de tool bloqueada por política anti-SSRF: {reason}")
-                return types.CallToolResult(
-                    is_error=True,
-                    content=[types.TextContent(type="text", text=f"Violação de Segurança (Anti-SSRF): {reason}")],
-                )
+        # Validação estrita de URL e anti-SSRF
+        if not (full_url.startswith("http://") or full_url.startswith("https://")):
+            return types.CallToolResult(
+                is_error=True,
+                content=[types.TextContent(type="text", text="Violação de Segurança: apenas URLs http/https são suportadas.")],
+            )
+
+        from central.security.ssrf import is_safe_external_url
+        is_safe, reason = is_safe_external_url(full_url)
+        if not is_safe:
+            logger.error(f"[{self.prefix}] Chamada de tool bloqueada por política anti-SSRF: {reason}")
+            return types.CallToolResult(
+                is_error=True,
+                content=[types.TextContent(type="text", text=f"Violação de Segurança (Anti-SSRF): {reason}")],
+            )
 
         headers = {"Content-Type": "application/json", **self.auth_headers}
 
         if not self._http_client:
-            self._http_client = httpx.AsyncClient(timeout=30.0)
+            self._http_client = httpx.AsyncClient(timeout=30.0, follow_redirects=False, trust_env=False)
 
 
         try:
@@ -239,12 +259,12 @@ class OpenApiUpstream(BaseUpstream):
             if method in ["POST", "PUT", "PATCH"] and body_params:
                 req_kwargs["json"] = body_params
 
-            resp = await self._http_client.request(method, full_url, **req_kwargs)
+            resp, response_body = await self._request_limited(method, full_url, **req_kwargs)
 
             try:
-                formatted_body = json.dumps(resp.json(), indent=2, ensure_ascii=False)
+                formatted_body = json.dumps(json.loads(response_body), indent=2, ensure_ascii=False)
             except Exception:
-                formatted_body = resp.text
+                formatted_body = response_body.decode(resp.encoding or "utf-8", errors="replace")
 
             is_err = resp.status_code >= 400
             result_text = f"HTTP {resp.status_code} {resp.reason_phrase}\n{formatted_body}"

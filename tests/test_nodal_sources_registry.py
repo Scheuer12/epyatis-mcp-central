@@ -32,15 +32,15 @@ from central.server import app
 def setup_gateway():
     """Garante que as instâncias estejam carregadas do banco de dados para os testes."""
     with get_db_context() as db:
-        inst = db.query(InstanceEntity).filter(InstanceEntity.slug == "horst-suite").first()
-        assert inst is not None, "Instância horst-suite deve existir no central.db"
+        inst = db.query(InstanceEntity).filter(InstanceEntity.slug == "exampleco-suite").first()
+        assert inst is not None, "Instância exampleco-suite deve existir no central.db"
     gateway_manager.load_from_db()
 
 
 @pytest.mark.asyncio
 async def test_01_search_by_single_tag():
     """Validação 1: Busca de fontes de dados por uma tag única."""
-    gw = gateway_manager.get_instance("horst-suite")
+    gw = gateway_manager.get_instance("exampleco-suite")
     assert gw is not None
 
     call_params = types.CallToolRequestParams(
@@ -53,8 +53,8 @@ async def test_01_search_by_single_tag():
     assert "sources" in data
     assert data["count"] >= 2
     ids = [s["id"] for s in data["sources"]]
-    assert "horst.procurement.whatsapp.primary" in ids
-    assert "horst.procurement.spreadsheet.ssot" in ids
+    assert "exampleco.procurement.whatsapp.primary" in ids
+    assert "exampleco.procurement.spreadsheet.ssot" in ids
 
     # Garante que campos leves foram retornados e campos pesados NÃO foram retornados na descoberta
     for s in data["sources"]:
@@ -72,9 +72,9 @@ async def test_01_search_by_single_tag():
 @pytest.mark.asyncio
 async def test_02_search_by_multiple_tags_and_semantics():
     """Validação 2: Busca por múltiplas tags utilizando semântica AND."""
-    gw = gateway_manager.get_instance("horst-suite")
+    gw = gateway_manager.get_instance("exampleco-suite")
 
-    # Ambas tags coincidem em 'horst.procurement.whatsapp.primary'
+    # Ambas tags coincidem em 'exampleco.procurement.whatsapp.primary'
     call_params = types.CallToolRequestParams(
         name="central__search_data_sources",
         arguments={"tags": ["procurement", "whatsapp"]}
@@ -83,7 +83,7 @@ async def test_02_search_by_multiple_tags_and_semantics():
     assert not res.is_error
     data = json.loads(res.content[0].text)
     assert data["count"] == 1
-    assert data["sources"][0]["id"] == "horst.procurement.whatsapp.primary"
+    assert data["sources"][0]["id"] == "exampleco.procurement.whatsapp.primary"
 
     # Combinação que não existe em nenhuma fonte isolada (AND semântica deve retornar zero)
     call_params_empty = types.CallToolRequestParams(
@@ -100,7 +100,7 @@ async def test_02_search_by_multiple_tags_and_semantics():
 @pytest.mark.asyncio
 async def test_03_search_by_business_purpose():
     """Validação 3: Busca por propósito de negócio (purpose)."""
-    gw = gateway_manager.get_instance("horst-suite")
+    gw = gateway_manager.get_instance("exampleco-suite")
 
     call_params = types.CallToolRequestParams(
         name="central__search_data_sources",
@@ -110,26 +110,26 @@ async def test_03_search_by_business_purpose():
     assert not res.is_error
     data = json.loads(res.content[0].text)
     assert data["count"] == 1
-    assert data["sources"][0]["id"] == "horst.operations.spreadsheet.schedule"
+    assert data["sources"][0]["id"] == "exampleco.operations.spreadsheet.schedule"
     assert data["sources"][0]["purpose"] == "field_schedule"
 
 
 @pytest.mark.asyncio
 async def test_04_get_data_source_detailed_definition():
     """Validação 4: Recuperação detalhada e completa de uma fonte específica por ID."""
-    gw = gateway_manager.get_instance("horst-suite")
+    gw = gateway_manager.get_instance("exampleco-suite")
 
     call_params = types.CallToolRequestParams(
         name="central__get_data_source",
-        arguments={"source_id": "horst.procurement.whatsapp.primary"}
+        arguments={"source_id": "exampleco.procurement.whatsapp.primary"}
     )
     res = await gw._handle_call_tool(None, call_params)
     assert not res.is_error
     source = json.loads(res.content[0].text)
 
     # Campos obrigatórios do contrato detalhado
-    assert source["id"] == "horst.procurement.whatsapp.primary"
-    assert source["name"] == "Horst - Compras (WhatsApp)"
+    assert source["id"] == "exampleco.procurement.whatsapp.primary"
+    assert source["name"] == "ExampleCo - Compras (WhatsApp)"
     assert source["system"] == "periskope"
     assert source["purpose"] == "procurement_communications"
     assert "procurement" in source["tags"]
@@ -158,7 +158,7 @@ async def test_04_get_data_source_detailed_definition():
 @pytest.mark.asyncio
 async def test_05_multiple_sources_same_system():
     """Validação 5: Múltiplos nós independentes que pertencem ao mesmo sistema subjacente."""
-    gw = gateway_manager.get_instance("horst-suite")
+    gw = gateway_manager.get_instance("exampleco-suite")
 
     # Sistema Periskope: dois grupos diferentes (Compras e Operações em Campo)
     call_periskope = types.CallToolRequestParams(
@@ -169,8 +169,8 @@ async def test_05_multiple_sources_same_system():
     assert not res_periskope.is_error
     data_p = json.loads(res_periskope.content[0].text)
     p_ids = [s["id"] for s in data_p["sources"]]
-    assert "horst.procurement.whatsapp.primary" in p_ids
-    assert "horst.operations.whatsapp.field" in p_ids
+    assert "exampleco.procurement.whatsapp.primary" in p_ids
+    assert "exampleco.operations.whatsapp.field" in p_ids
     assert len(p_ids) >= 2
 
     # Sistema Google Drive: duas planilhas e uma pasta de vault governança
@@ -182,20 +182,20 @@ async def test_05_multiple_sources_same_system():
     assert not res_gdrive.is_error
     data_g = json.loads(res_gdrive.content[0].text)
     g_ids = [s["id"] for s in data_g["sources"]]
-    assert "horst.procurement.spreadsheet.ssot" in g_ids
-    assert "horst.operations.spreadsheet.schedule" in g_ids
-    assert "horst.governance.vault.primary" in g_ids
+    assert "exampleco.procurement.spreadsheet.ssot" in g_ids
+    assert "exampleco.operations.spreadsheet.schedule" in g_ids
+    assert "exampleco.governance.vault.primary" in g_ids
     assert len(g_ids) >= 3
 
 
 @pytest.mark.asyncio
 async def test_06_source_updates_and_version_freshness():
     """Validação 6: Atualizações de fontes por administradores, versionamento e frescor sem cache obsoleto."""
-    gw = gateway_manager.get_instance("horst-suite")
+    gw = gateway_manager.get_instance("exampleco-suite")
 
     # 1. Recupera versão inicial e native_resource_id inicial
     with get_db_context() as db:
-        orig = CentralRepository.get_instance_source_by_id(db, "horst-suite", "horst.procurement.spreadsheet.ssot")
+        orig = CentralRepository.get_instance_source_by_id(db, "exampleco-suite", "exampleco.procurement.spreadsheet.ssot")
         assert orig is not None
         v_init = orig.get("version", "1.0")
         orig_native = orig.get("native_resource_id")
@@ -205,8 +205,8 @@ async def test_06_source_updates_and_version_freshness():
         with get_db_context() as db:
             updated = CentralRepository.update_instance_source(
                 db,
-                slug="horst-suite",
-                source_id="horst.procurement.spreadsheet.ssot",
+                slug="exampleco-suite",
+                source_id="exampleco.procurement.spreadsheet.ssot",
                 updates={
                     "native_resource_id": "NOVO_SPREADSHEET_ID_2026_TESTE",
                     "guidance": "Guidance atualizado pelo administrador para compras 2026.",
@@ -218,13 +218,13 @@ async def test_06_source_updates_and_version_freshness():
             assert any(orig_native in h for h in updated["historical_or_alternative_sources"])
 
         # Recarrega instância no gateway para simular o comportamento de notificação / frescor
-        await gateway_manager.reload_instance("horst-suite")
-        fresh_gw = gateway_manager.get_instance("horst-suite")
+        await gateway_manager.reload_instance("exampleco-suite")
+        fresh_gw = gateway_manager.get_instance("exampleco-suite")
 
         # 3. Consulta imediatamente via MCP Tool e verifica que não há cache obsoleto
         call_get = types.CallToolRequestParams(
             name="central__get_data_source",
-            arguments={"source_id": "horst.procurement.spreadsheet.ssot"}
+            arguments={"source_id": "exampleco.procurement.spreadsheet.ssot"}
         )
         res_get = await fresh_gw._handle_call_tool(None, call_get)
         fresh_source = json.loads(res_get.content[0].text)
@@ -237,20 +237,20 @@ async def test_06_source_updates_and_version_freshness():
         with get_db_context() as db:
             CentralRepository.update_instance_source(
                 db,
-                slug="horst-suite",
-                source_id="horst.procurement.spreadsheet.ssot",
+                slug="exampleco-suite",
+                source_id="exampleco.procurement.spreadsheet.ssot",
                 updates={
                     "native_resource_id": orig_native,
                     "guidance": "Planilha oficial Single Source of Truth para rastreamento de compras, conciliação e aprovações. Localizada na pasta Gestao SSoT.",
                 }
             )
-        await gateway_manager.reload_instance("horst-suite")
+        await gateway_manager.reload_instance("exampleco-suite")
 
 
 @pytest.mark.asyncio
 async def test_07_legacy_data_sources_map_compatibility():
     """Validação 7: central__get_data_sources_map continua operacional e compatível."""
-    gw = gateway_manager.get_instance("horst-suite")
+    gw = gateway_manager.get_instance("exampleco-suite")
 
     call_params = types.CallToolRequestParams(
         name="central__get_data_sources_map",
@@ -259,7 +259,7 @@ async def test_07_legacy_data_sources_map_compatibility():
     res = await gw._handle_call_tool(None, call_params)
     assert not res.is_error
     map_data = json.loads(res.content[0].text)
-    assert map_data["organization"] == "Horst Group"
+    assert map_data["organization"] == "ExampleCo Group"
     assert len(map_data["sources"]) >= 5
     for s in map_data["sources"]:
         assert "name" in s
@@ -270,11 +270,11 @@ async def test_07_legacy_data_sources_map_compatibility():
 async def test_08_data_source_kit_compatibility():
     """Validação 8: Compatibilidade com Data-Source Kits contendo metadados nodais."""
     with get_db_context() as db:
-        sources = CentralRepository.get_instance_sources(db, "horst-suite")
+        sources = CentralRepository.get_instance_sources(db, "exampleco-suite")
         kit = DataSourceKitEntity(
             id="kit_test_nodal",
             user_id="user_root",
-            name="Kit Operacional Horst Teste",
+            name="Kit Operacional ExampleCo Teste",
             description="Kit contendo fontes nodais para teste",
             sources_json=json.dumps(sources),
             category="Operações",
@@ -287,7 +287,7 @@ async def test_08_data_source_kit_compatibility():
         saved_kit = db.query(DataSourceKitEntity).filter(DataSourceKitEntity.id == "kit_test_nodal").first()
         assert saved_kit is not None
         assert len(saved_kit.sources) >= 5
-        assert any(s["id"] == "horst.procurement.whatsapp.primary" for s in saved_kit.sources)
+        assert any(s["id"] == "exampleco.procurement.whatsapp.primary" for s in saved_kit.sources)
 
         # Limpeza
         db.delete(saved_kit)
@@ -303,7 +303,7 @@ async def test_09_persistence_across_service_reload():
     """Validação 9: Persistência de metadados nodais no SQLite através de recarga completa."""
     # 1. Recarrega gateway a partir do banco de dados
     gateway_manager.load_from_db()
-    gw = gateway_manager.get_instance("horst-suite")
+    gw = gateway_manager.get_instance("exampleco-suite")
     assert gw is not None
 
     # 2. Confirma que os nós persistiram intactos
@@ -320,7 +320,7 @@ async def test_09_persistence_across_service_reload():
 @pytest.mark.asyncio
 async def test_10_existing_mcp_tools_and_connections_remain_functional():
     """Validação 10: Ferramentas pré-existentes permanecem listadas e ativas."""
-    gw = gateway_manager.get_instance("horst-suite")
+    gw = gateway_manager.get_instance("exampleco-suite")
     tools_result = await gw._handle_list_tools(None)
     tool_names = [t.name for t in tools_result.tools]
 
@@ -344,7 +344,7 @@ async def test_response_size_measurement_token_efficiency():
     Mede a diferença em bytes entre carregar o mapa completo de fontes e
     descobrir um conjunto filtrado de descritores leves.
     """
-    gw = gateway_manager.get_instance("horst-suite")
+    gw = gateway_manager.get_instance("exampleco-suite")
 
     # 1. Resposta do mapa completo legado (central__get_data_sources_map)
     call_full = types.CallToolRequestParams(

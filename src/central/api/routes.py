@@ -2,7 +2,7 @@
 Rotas da API REST administrativa (v1) para o Epyatis MCP Central.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 import logging
 import secrets
@@ -29,11 +29,14 @@ from central.templates_catalog.registry import get_all_templates, get_template_b
 
 from central.security import (
     get_current_user,
+    require_connection_access,
     require_admin_auth,
+    require_instance_access,
     require_master_admin,
     validate_stdio_command,
     validate_visibility_permission,
 )
+from central.security.tokens import hash_bearer_token, mask_bearer_token
 
 logger = logging.getLogger(__name__)
 
@@ -71,10 +74,6 @@ class CreateInviteRequest(BaseModel):
 
 class ShareUsersRequest(BaseModel):
     user_ids: list[str] = Field(default_factory=list)
-
-
-class SwitchUserRequest(BaseModel):
-    username: str
 
 
 class UserCreateRequest(BaseModel):
@@ -209,7 +208,12 @@ def login(data: LoginRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
         if not user:
             user = CentralRepository.create_user(db, "epy_root", role="epy_root", display_name="Master Administrator")
         session_token = f"sess_{secrets.token_hex(24)}"
-        CentralRepository.create_session(db, user.id, session_token)
+        CentralRepository.create_session(
+            db,
+            user.id,
+            session_token,
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=8),
+        )
         return {
             "token": session_token,
             "user": {
@@ -228,7 +232,12 @@ def login(data: LoginRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
             raise HTTPException(status_code=status_code, detail=err_msg or "Credenciais inválidas.")
 
         session_token = f"sess_{secrets.token_hex(24)}"
-        CentralRepository.create_session(db, user.id, session_token)
+        CentralRepository.create_session(
+            db,
+            user.id,
+            session_token,
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=8),
+        )
         return {
             "token": session_token,
             "user": {
@@ -239,29 +248,7 @@ def login(data: LoginRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
             }
         }
 
-    # Fallback para logins programáticos de teste ou contas legadas sem senha
-    user = CentralRepository.get_user_by_username(db, data.username)
-    if not user:
-        raise HTTPException(status_code=401, detail="Usuário não encontrado.")
-
-    if getattr(user, "status", "approved") == "pending_approval":
-        raise HTTPException(status_code=403, detail="Sua conta está aguardando aprovação pelo Master Admin.")
-    if getattr(user, "status", "approved") == "rejected":
-        raise HTTPException(status_code=403, detail="Sua solicitação de acesso foi rejeitada pelo administrador.")
-    if not user.is_active:
-        raise HTTPException(status_code=403, detail="Conta desativada.")
-
-    session_token = f"sess_{secrets.token_hex(24)}"
-    CentralRepository.create_session(db, user.id, session_token)
-    return {
-        "token": session_token,
-        "user": {
-            "id": user.id,
-            "username": user.username,
-            "role": user.role,
-            "display_name": user.display_name or user.username,
-        }
-    }
+    raise HTTPException(status_code=401, detail="Credenciais obrigatórias ausentes.")
 
 
 @auth_router.post("/register")
@@ -336,27 +323,6 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)) -> dict[str, 
     }
 
 
-@auth_router.post("/switch-user")
-def switch_user(data: SwitchUserRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
-    """Alterna rapidamente o contexto de sessão para outro usuário."""
-    user = CentralRepository.get_user_by_username(db, data.username)
-    if not user:
-        user = CentralRepository.create_user(db, data.username, role="standard")
-
-    session_token = f"sess_{secrets.token_hex(24)}"
-    CentralRepository.create_session(db, user.id, session_token)
-    return {
-        "status": "success",
-        "token": session_token,
-        "user": {
-            "id": user.id,
-            "username": user.username,
-            "role": user.role,
-            "display_name": user.display_name or user.username,
-        }
-    }
-
-
 @auth_router.get("/me")
 def get_me(current_user: UserEntity = Depends(get_current_user)) -> dict[str, Any]:
     """Retorna os dados do usuário autenticado atual."""
@@ -383,7 +349,10 @@ def logout(
 
 
 @api_router.get("/users")
-def list_users(db: Session = Depends(get_db)) -> list[dict[str, Any]]:
+def list_users(
+    db: Session = Depends(get_db),
+    current_user: UserEntity = Depends(require_master_admin),
+) -> list[dict[str, Any]]:
     """Lista todos os usuários registrados."""
     users = CentralRepository.get_all_users(db)
     return [
@@ -600,10 +569,18 @@ def create_connection(
     db: Session = Depends(get_db),
     current_user: UserEntity = Depends(get_current_user),
 ) -> dict[str, Any]:
-    """Cria ou atualiza uma conexão upstream respeitando controle de visibilidade."""
+    """Cria uma conexão upstream sem permitir colisões de identificador."""
     validate_visibility_permission(current_user, data.visibility)
 
+    if CentralRepository.get_connection_by_id(db, data.id):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Já existe uma conexão com o identificador '{data.id}'. Use a rota de atualização.",
+        )
+
     if data.type == "stdio":
+        if current_user.role != "epy_root":
+            raise HTTPException(status_code=403, detail="Conexões stdio são restritas ao master admin.")
         try:
             validate_stdio_command(data.command, data.args)
         except ValueError as err:
@@ -645,6 +622,8 @@ async def update_connection_endpoint(
         validate_visibility_permission(current_user, data.visibility)
 
     if data.type == "stdio":
+        if current_user.role != "epy_root":
+            raise HTTPException(status_code=403, detail="Conexões stdio são restritas ao master admin.")
         try:
             validate_stdio_command(data.command, data.args)
         except ValueError as err:
@@ -668,7 +647,7 @@ async def update_connection_endpoint(
     for slug, gw in list(gateway_manager.instances.items()):
         if conn_id in gw.upstreams:
             try:
-                await gateway_manager.reload_instance(slug, db)
+                await gateway_manager.reload_instance(slug)
             except Exception as e:
                 logger.warning(f"Erro ao recarregar instância '{slug}' após atualização da conexão '{conn_id}': {e}")
 
@@ -688,6 +667,7 @@ def save_connection_as_template(
     conn = CentralRepository.get_connection_by_id(db, conn_id)
     if not conn:
         raise HTTPException(status_code=404, detail="Conexão de origem não encontrada.")
+    require_connection_access(conn, current_user, db, operation="read")
 
     template_name = data.name or f"Modelo - {conn.name}"
     tmpl = CentralRepository.create_template(
@@ -743,6 +723,8 @@ def create_connection_template(
     validate_visibility_permission(current_user, data.visibility)
 
     if data.type == "stdio":
+        if current_user.role != "epy_root":
+            raise HTTPException(status_code=403, detail="Templates stdio são restritos ao master admin.")
         try:
             validate_stdio_command(data.command, data.args)
         except ValueError as err:
@@ -829,6 +811,8 @@ def update_connection_template_endpoint(
         validate_visibility_permission(current_user, data.visibility)
 
     if data.type == "stdio":
+        if current_user.role != "epy_root":
+            raise HTTPException(status_code=403, detail="Conexões stdio são restritas ao master admin.")
         try:
             validate_stdio_command(data.command, data.args)
         except ValueError as err:
@@ -863,6 +847,12 @@ def instantiate_connection_template(
     tmpl = CentralRepository.get_template_by_id(db, template_id)
     if not tmpl:
         raise HTTPException(status_code=404, detail="Modelo de conexão não encontrado.")
+    if tmpl.visibility == "private" and current_user.role != "epy_root" and tmpl.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Acesso negado ao modelo solicitado.")
+    if CentralRepository.get_connection_by_id(db, data.connection_id):
+        raise HTTPException(status_code=409, detail="O identificador de conexão já existe.")
+    if tmpl.type == "stdio" and current_user.role != "epy_root":
+        raise HTTPException(status_code=403, detail="Templates stdio são restritos ao master admin.")
 
     merged_env = dict(tmpl.env)
     merged_env.update(data.env_overrides or {})
@@ -883,61 +873,17 @@ def instantiate_connection_template(
     return {"status": "success", "connection_id": conn.id}
 
 
-@api_router.put("/connections/{conn_id}")
-async def update_connection_endpoint(
+@api_router.post("/connections/{conn_id}/discover")
+async def discover_connection_tools(
     conn_id: str,
-    data: ConnectionUpdateRequest,
     db: Session = Depends(get_db),
     current_user: UserEntity = Depends(get_current_user),
 ) -> dict[str, Any]:
-    """Atualiza as configurações de uma conexão existente."""
-    conn = CentralRepository.get_connection_by_id(db, conn_id)
-    if not conn:
-        raise HTTPException(status_code=404, detail="Conexão não encontrada.")
-
-    if current_user.role != "epy_root" and conn.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Apenas o criador ou o master admin podem alterar esta conexão.")
-
-    if data.visibility:
-        validate_visibility_permission(current_user, data.visibility)
-
-    if data.type == "stdio":
-        try:
-            validate_stdio_command(data.command, data.args)
-        except ValueError as err:
-            raise HTTPException(status_code=400, detail=str(err))
-
-    updated_conn = CentralRepository.create_or_update_connection(
-        db=db,
-        connection_id=conn_id,
-        name=data.name,
-        conn_type=data.type,
-        prefix=data.prefix,
-        command=data.command,
-        args=data.args,
-        env=data.env,
-        url=data.url,
-        auth_config=data.auth_config,
-        visibility=data.visibility or conn.visibility,
-    )
-
-    # Recarrega upstreams nas instâncias ativas do gateway_manager se aplicável
-    for slug, gw in list(gateway_manager.instances.items()):
-        if conn_id in gw.upstreams:
-            try:
-                await gateway_manager.reload_instance(slug, db)
-            except Exception as e:
-                logger.warning(f"Erro ao recarregar instância '{slug}' após atualização da conexão '{conn_id}': {e}")
-
-    return {"status": "success", "connection_id": updated_conn.id}
-
-
-@api_router.post("/connections/{conn_id}/discover")
-async def discover_connection_tools(conn_id: str, db: Session = Depends(get_db)) -> dict[str, Any]:
     """Dispara a descoberta e sincronização de tools para uma conexão."""
     conn = CentralRepository.get_connection_by_id(db, conn_id)
     if not conn:
         raise HTTPException(status_code=404, detail="Conexão não encontrada.")
+    require_connection_access(conn, current_user, db, operation="modify")
 
     # Procura um gateway em execução que tenha essa conexão
     matching_upstream = None
@@ -1036,7 +982,7 @@ def list_instances(
             for assoc in inst.connection_associations
         ]
         tokens = [
-            {"id": t.id, "token": t.token, "label": t.label}
+            {"id": t.id, "token_hint": mask_bearer_token(t.token), "label": t.label}
             for t in inst.tokens
         ]
 
@@ -1094,6 +1040,7 @@ async def create_instance(
     for conn_id in data.connection_ids:
         conn = CentralRepository.get_connection_by_id(db, conn_id)
         if conn:
+            require_connection_access(conn, current_user, db, operation="use")
             assoc = InstanceConnectionEntity(
                 instance_id=instance.id,
                 connection_id=conn.id,
@@ -1105,7 +1052,12 @@ async def create_instance(
     # Recarrega no gateway em memória
     await gateway_manager.reload_instance(data.slug)
 
-    return {"status": "success", "instance_id": instance.id, "slug": instance.slug}
+    return {
+        "status": "success",
+        "instance_id": instance.id,
+        "slug": instance.slug,
+        "token": instance.issued_token,
+    }
 
 
 @api_router.get("/instances/{slug}")
@@ -1119,13 +1071,7 @@ def get_instance_detail(
     if not inst:
         raise HTTPException(status_code=404, detail="Instância não encontrada.")
 
-    if current_user.role != "epy_root":
-        if inst.visibility == "private" and inst.user_id != current_user.id:
-            raise HTTPException(status_code=403, detail="Acesso restrito ao proprietário da instância.")
-        if inst.visibility == "shared" and inst.user_id != current_user.id:
-            shared_uids = CentralRepository.get_instance_shared_user_ids(db, inst.id)
-            if current_user.id not in shared_uids:
-                raise HTTPException(status_code=403, detail="Acesso não compartilhado com este usuário.")
+    require_instance_access(inst, current_user, db, operation="read")
 
     conns = [
         {
@@ -1138,7 +1084,7 @@ def get_instance_detail(
         for assoc in inst.connection_associations
     ]
     tokens = [
-        {"id": t.id, "token": t.token, "label": t.label}
+        {"id": t.id, "token_hint": mask_bearer_token(t.token), "label": t.label}
         for t in inst.tokens
     ]
     sources_map = {}
@@ -1210,6 +1156,7 @@ def get_instance_shares_endpoint(
     inst = CentralRepository.get_instance_by_slug(db, slug)
     if not inst:
         raise HTTPException(status_code=404, detail="Instância não encontrada.")
+    require_instance_access(inst, current_user, db, operation="modify")
     shared_uids = CentralRepository.get_instance_shared_user_ids(db, inst.id)
     return {
         "instance_slug": slug,
@@ -1268,10 +1215,12 @@ async def attach_connection_endpoint(
     inst = CentralRepository.get_instance_by_slug(db, slug)
     if not inst:
         raise HTTPException(status_code=404, detail="Instância não encontrada.")
+    require_instance_access(inst, current_user, db, operation="modify")
 
     conn = CentralRepository.get_connection_by_id(db, data.connection_id)
     if not conn:
         raise HTTPException(status_code=404, detail=f"Conexão '{data.connection_id}' não encontrada.")
+    require_connection_access(conn, current_user, db, operation="use")
 
     CentralRepository.attach_connection_to_instance(db, inst.id, conn.id)
     await gateway_manager.reload_instance(slug)
@@ -1289,6 +1238,7 @@ async def detach_connection_endpoint(
     inst = CentralRepository.get_instance_by_slug(db, slug)
     if not inst:
         raise HTTPException(status_code=404, detail="Instância não encontrada.")
+    require_instance_access(inst, current_user, db, operation="modify")
 
     CentralRepository.detach_connection_from_instance(db, inst.id, conn_id)
     await gateway_manager.reload_instance(slug)
@@ -1387,6 +1337,7 @@ def save_instance_as_kit(
     instance = CentralRepository.get_instance_by_slug(db, slug)
     if not instance:
         raise HTTPException(status_code=404, detail="Instância não encontrada.")
+    require_instance_access(instance, current_user, db, operation="read")
 
     sources = []
     if instance.data_sources_map and isinstance(instance.data_sources_map, dict):
@@ -1565,6 +1516,9 @@ async def apply_kit_to_instance(
     instance = CentralRepository.get_instance_by_slug(db, slug)
     if not instance:
         raise HTTPException(status_code=404, detail="Instância não encontrada.")
+    require_instance_access(instance, current_user, db, operation="modify")
+    if kit.visibility == "private" and current_user.role != "epy_root" and kit.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Acesso negado ao Kit solicitado.")
 
     # Mescla as fontes do Kit mantendo a organização da instância
     current_map = instance.data_sources_map or {"organization": instance.name, "sources": []}
@@ -1598,27 +1552,17 @@ async def apply_kit_to_instance(
         "sources_count": len(existing_sources),
     }
 
-    # Associa conexões selecionadas
-    for conn_id in data.connection_ids:
-        conn = CentralRepository.get_connection_by_id(db, conn_id)
-        if conn:
-            assoc = InstanceConnectionEntity(
-                instance_id=instance.id,
-                connection_id=conn.id,
-                is_enabled=True,
-            )
-            db.add(assoc)
-    db.commit()
-
-    # Recarrega no gateway em memória
-    await gateway_manager.reload_instance(data.slug)
-
-    return {"status": "success", "instance_id": instance.id, "slug": instance.slug}
-
-
 @api_router.post("/instances/{slug}/reload")
-async def reload_instance_endpoint(slug: str) -> dict[str, Any]:
+async def reload_instance_endpoint(
+    slug: str,
+    db: Session = Depends(get_db),
+    current_user: UserEntity = Depends(get_current_user),
+) -> dict[str, Any]:
     """Recarrega uma instância no gateway assíncrono."""
+    instance = CentralRepository.get_instance_by_slug(db, slug)
+    if not instance:
+        raise HTTPException(status_code=404, detail=f"Instância '{slug}' não encontrada ou inativa.")
+    require_instance_access(instance, current_user, db, operation="modify")
     success = await gateway_manager.reload_instance(slug)
     if not success:
         raise HTTPException(status_code=404, detail=f"Instância '{slug}' não encontrada ou inativa.")
@@ -1626,27 +1570,45 @@ async def reload_instance_endpoint(slug: str) -> dict[str, Any]:
 
 
 @api_router.post("/instances/{instance_id}/tokens")
-def add_instance_token(instance_id: str, data: TokenCreateRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
+async def add_instance_token(
+    instance_id: str,
+    data: TokenCreateRequest,
+    db: Session = Depends(get_db),
+    current_user: UserEntity = Depends(get_current_user),
+) -> dict[str, Any]:
     """Gera um novo token de acesso para a instância."""
     instance = CentralRepository.get_instance_by_id(db, instance_id)
     if not instance:
         raise HTTPException(status_code=404, detail="Instância não encontrada.")
+    require_instance_access(instance, current_user, db, operation="modify")
 
-    token_val = data.token or f"epy_{instance.slug}_{abs(hash(instance.slug + str(datetime.utcnow()))) % 10000000}"
+    if data.token is not None:
+        raise HTTPException(status_code=400, detail="Tokens personalizados não são aceitos; omita o campo token.")
+    token_val = f"epy_{secrets.token_urlsafe(32)}"
     token_entity = InstanceTokenEntity(
         instance_id=instance.id,
-        token=token_val,
+        token=hash_bearer_token(token_val),
         label=data.label,
     )
     db.add(token_entity)
     db.commit()
+    await gateway_manager.reload_instance(instance.slug)
 
     return {"status": "success", "token": token_val, "label": data.label}
 
 
 @api_router.delete("/instances/{instance_id}/tokens/{token_id}")
-def delete_instance_token(instance_id: str, token_id: str, db: Session = Depends(get_db)) -> dict[str, Any]:
+async def delete_instance_token(
+    instance_id: str,
+    token_id: str,
+    db: Session = Depends(get_db),
+    current_user: UserEntity = Depends(get_current_user),
+) -> dict[str, Any]:
     """Revoga um token de acesso de uma instância."""
+    instance = CentralRepository.get_instance_by_id(db, instance_id)
+    if not instance:
+        raise HTTPException(status_code=404, detail="Instância não encontrada.")
+    require_instance_access(instance, current_user, db, operation="modify")
     token_entity = (
         db.query(InstanceTokenEntity)
         .filter(InstanceTokenEntity.id == token_id, InstanceTokenEntity.instance_id == instance_id)
@@ -1657,6 +1619,7 @@ def delete_instance_token(instance_id: str, token_id: str, db: Session = Depends
 
     db.delete(token_entity)
     db.commit()
+    await gateway_manager.reload_instance(instance.slug)
     return {"status": "success", "message": "Token revogado."}
 
 
@@ -1665,6 +1628,7 @@ def get_audit_logs(
     limit: int = Query(50, ge=1, le=200),
     instance_slug: str | None = None,
     db: Session = Depends(get_db),
+    current_user: UserEntity = Depends(require_master_admin),
 ) -> list[dict[str, Any]]:
     """Retorna os logs de auditoria mais recentes das execuções de ferramentas."""
     from central.db.entities import AuditLogEntity
@@ -1692,9 +1656,14 @@ def get_instance_audit_logs(
     slug: str,
     limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
+    current_user: UserEntity = Depends(get_current_user),
 ) -> list[dict[str, Any]]:
     """Retorna os logs de auditoria específicos de uma instância."""
     from central.db.entities import AuditLogEntity
+    instance = CentralRepository.get_instance_by_slug(db, slug)
+    if not instance:
+        raise HTTPException(status_code=404, detail="Instância não encontrada.")
+    require_instance_access(instance, current_user, db, operation="modify")
     logs = (
         db.query(AuditLogEntity)
         .filter(AuditLogEntity.instance_slug == slug)
@@ -1725,7 +1694,7 @@ def get_instance_audit_logs(
 class CreateFromTemplateRequest(BaseModel):
     template_id: str = Field(..., description="ID do template (ex: gdrive-template, openapi-template)")
     form_values: dict[str, Any] = Field(..., description="Valores preenchidos no formulário do template")
-    target_instance_slug: str = Field("horst-suite", description="Instância à qual associar a nova conexão")
+    target_instance_slug: str = Field("demo-suite", description="Instância à qual associar a nova conexão")
 
 
 class SourcesMapUpdateRequest(BaseModel):
@@ -1785,6 +1754,7 @@ def list_connection_templates() -> list[dict[str, Any]]:
 async def create_connection_from_template(
     data: CreateFromTemplateRequest,
     db: Session = Depends(get_db),
+    current_user: UserEntity = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Cria uma nova conexão a partir de um template pré-definido e associa à instância."""
     tmpl = get_template_by_id(data.template_id)
@@ -1795,6 +1765,10 @@ async def create_connection_from_template(
     conn_id = vals.get("id")
     if not conn_id:
         raise HTTPException(status_code=400, detail="Campo obrigatório 'id' não informado.")
+    if CentralRepository.get_connection_by_id(db, conn_id):
+        raise HTTPException(status_code=409, detail="O identificador de conexão já existe.")
+    if tmpl.type == "stdio" and current_user.role != "epy_root":
+        raise HTTPException(status_code=403, detail="Templates stdio são restritos ao master admin.")
 
     name = vals.get("name") or tmpl.name
     prefix = vals.get("prefix") or tmpl.default_prefix
@@ -1855,11 +1829,13 @@ async def create_connection_from_template(
         env=env,
         url=url,
         auth_config=auth_config,
+        user_id=current_user.id,
     )
 
     # Associa à instância alvo
     target_inst = CentralRepository.get_instance_by_slug(db, data.target_instance_slug)
     if target_inst:
+        require_instance_access(target_inst, current_user, db, operation="modify")
         existing_assoc = (
             db.query(InstanceConnectionEntity)
             .filter(
@@ -1897,11 +1873,16 @@ async def create_connection_from_template(
 
 
 @api_router.get("/instances/{slug}/sources-map")
-def get_instance_sources_map(slug: str, db: Session = Depends(get_db)) -> dict[str, Any]:
+def get_instance_sources_map(
+    slug: str,
+    db: Session = Depends(get_db),
+    current_user: UserEntity = Depends(get_current_user),
+) -> dict[str, Any]:
     """Retorna o Mapa de Fontes de Dados configurado para uma instância."""
     instance = CentralRepository.get_instance_by_slug(db, slug)
     if not instance:
         raise HTTPException(status_code=404, detail="Instância não encontrada.")
+    require_instance_access(instance, current_user, db, operation="read")
     return instance.data_sources_map or {"organization": instance.name, "sources": []}
 
 
@@ -1910,8 +1891,13 @@ async def update_instance_sources_map(
     slug: str,
     data: SourcesMapUpdateRequest,
     db: Session = Depends(get_db),
+    current_user: UserEntity = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Atualiza as diretrizes do Mapa de Fontes de Dados e sincroniza com o gateway."""
+    instance = CentralRepository.get_instance_by_slug(db, slug)
+    if not instance:
+        raise HTTPException(status_code=404, detail="Instância não encontrada.")
+    require_instance_access(instance, current_user, db, operation="modify")
     ds_map_dict = {
         "organization": data.organization,
         "sources": data.sources,
@@ -1943,6 +1929,7 @@ def list_instance_sources_endpoint(
     instance = CentralRepository.get_instance_by_slug(db, slug)
     if not instance:
         raise HTTPException(status_code=404, detail="Instância não encontrada.")
+    require_instance_access(instance, current_user, db, operation="read")
     sources = CentralRepository.get_instance_sources(db, slug)
 
     if purpose:
@@ -1970,6 +1957,7 @@ async def create_instance_source_endpoint(
     instance = CentralRepository.get_instance_by_slug(db, slug)
     if not instance:
         raise HTTPException(status_code=404, detail="Instância não encontrada.")
+    require_instance_access(instance, current_user, db, operation="read")
     if current_user.role != "epy_root" and instance.user_id and instance.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Apenas o criador ou o master admin podem alterar fontes desta instância.")
 
@@ -1992,6 +1980,7 @@ def get_instance_source_endpoint(
     instance = CentralRepository.get_instance_by_slug(db, slug)
     if not instance:
         raise HTTPException(status_code=404, detail="Instância não encontrada.")
+    require_instance_access(instance, current_user, db, operation="read")
     source = CentralRepository.get_instance_source_by_id(db, slug, source_id)
     if not source:
         raise HTTPException(status_code=404, detail=f"Fonte de dados '{source_id}' não encontrada.")
@@ -2010,8 +1999,7 @@ async def update_instance_source_endpoint(
     instance = CentralRepository.get_instance_by_slug(db, slug)
     if not instance:
         raise HTTPException(status_code=404, detail="Instância não encontrada.")
-    if current_user.role != "epy_root" and instance.user_id and instance.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Apenas o criador ou o master admin podem alterar fontes desta instância.")
+    require_instance_access(instance, current_user, db, operation="modify")
 
     updated = CentralRepository.update_instance_source(db, slug, source_id, data.model_dump(exclude_unset=True))
     if not updated:
@@ -2032,8 +2020,7 @@ async def delete_instance_source_endpoint(
     instance = CentralRepository.get_instance_by_slug(db, slug)
     if not instance:
         raise HTTPException(status_code=404, detail="Instância não encontrada.")
-    if current_user.role != "epy_root" and instance.user_id and instance.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Apenas o criador ou o master admin podem alterar fontes desta instância.")
+    require_instance_access(instance, current_user, db, operation="modify")
 
     deleted = CentralRepository.delete_instance_source(db, slug, source_id)
     if not deleted:
@@ -2044,11 +2031,16 @@ async def delete_instance_source_endpoint(
 
 
 @api_router.get("/instances/{slug}/tools")
-def list_instance_tools_state(slug: str, db: Session = Depends(get_db)) -> list[dict[str, Any]]:
+def list_instance_tools_state(
+    slug: str,
+    db: Session = Depends(get_db),
+    current_user: UserEntity = Depends(get_current_user),
+) -> list[dict[str, Any]]:
     """Lista todas as ferramentas disponíveis para uma instância e seu status ativo/inativo."""
     instance = CentralRepository.get_instance_by_slug(db, slug)
     if not instance:
         raise HTTPException(status_code=404, detail="Instância não encontrada.")
+    require_instance_access(instance, current_user, db, operation="read")
 
     # Conexões associadas à instância
     conns = [
@@ -2089,11 +2081,13 @@ async def toggle_tool_for_instance(
     tool_id: str,
     data: ToolToggleRequest,
     db: Session = Depends(get_db),
+    current_user: UserEntity = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Habilita ou desabilita uma ferramenta específica para uma instância (Allowlist)."""
     instance = CentralRepository.get_instance_by_slug(db, slug)
     if not instance:
         raise HTTPException(status_code=404, detail="Instância não encontrada.")
+    require_instance_access(instance, current_user, db, operation="modify")
 
     # Resolve o ID real da tool no banco (pode ter sido passado namespaced_name ou tool_id)
     from central.db.entities import ToolEntity

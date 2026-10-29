@@ -7,20 +7,14 @@ import logging
 import os
 import re
 
+from central.config import settings
+
 logger = logging.getLogger(__name__)
 
 # Lista estrita de executáveis permitidos para servidores MCP locais
 ALLOWED_EXECUTABLES = {
     "npx",
     "npx.cmd",
-    "node",
-    "node.exe",
-    "python",
-    "python.exe",
-    "uv",
-    "uv.exe",
-    "uvx",
-    "uvx.exe",
 }
 
 # Pacotes e argumentos sensíveis proibidos
@@ -48,9 +42,32 @@ def validate_stdio_command(command: str | None, args: list[str] | None = None) -
             f"Binários homologados: {', '.join(sorted(ALLOWED_EXECUTABLES))}."
         )
 
+    normalized_args = args or []
+    package_candidates = [
+        arg for arg in normalized_args
+        if isinstance(arg, str) and arg not in {"-y", "--yes"} and not arg.startswith("-")
+    ]
+    if not package_candidates:
+        raise ValueError("npx exige um pacote MCP explicitamente versionado e homologado.")
+
+    package = package_candidates[0]
+    if package.startswith("@"):
+        package_name, separator, version = package.rpartition("@")
+        pinned = bool(separator and "/" in package_name and version)
+    else:
+        package_name, separator, version = package.rpartition("@")
+        pinned = bool(separator and package_name and version)
+
+    exact_version = bool(re.fullmatch(r"\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?", version))
+    if not pinned or not exact_version:
+        raise ValueError("O pacote npx deve usar versão semântica exata (ex.: pacote@1.2.3).")
+
+    if package not in settings.STDIO_ALLOWED_PACKAGES:
+        raise ValueError(f"Pacote stdio '{package}' não está na allowlist administrativa.")
+
     # Verifica os argumentos para detectar injeções de comando ou invocação de interpretadores de shell
-    if args:
-        for arg in args:
+    if normalized_args:
+        for arg in normalized_args:
             if not isinstance(arg, str):
                 continue
             for pattern in FORBIDDEN_PATTERNS:

@@ -31,10 +31,10 @@ async def test_database_persistence_and_seeding():
         assert overview["total_instances"] >= 1
         assert overview["total_connections"] >= 3
 
-        # 2. Verifica instância horst-suite
-        instance = CentralRepository.get_instance_by_slug(db, "horst-suite")
+        # 2. Verifica instância exampleco-suite
+        instance = CentralRepository.get_instance_by_slug(db, "exampleco-suite")
         assert instance is not None
-        assert instance.slug == "horst-suite"
+        assert instance.slug == "exampleco-suite"
         assert len(instance.tokens) >= 1
         assert any(t.token == "epy_dev_token_123" for t in instance.tokens)
 
@@ -71,7 +71,7 @@ async def test_admin_api_endpoints():
         assert res.status_code == 200
         instances = res.json()
         assert len(instances) >= 1
-        assert any(i["slug"] == "horst-suite" for i in instances)
+        assert any(i["slug"] == "exampleco-suite" for i in instances)
 
         # 4. Catálogo de Tools
         res = await client.get("/api/v1/tools?limit=10")
@@ -85,7 +85,7 @@ async def test_admin_api_endpoints():
 async def test_tool_call_audit_logging():
     # 1. Inicia o gateway e executa uma chamada via MCP
     await gateway_manager.start_all()
-    gateway = gateway_manager.get_instance("horst-suite")
+    gateway = gateway_manager.get_instance("exampleco-suite")
     assert gateway is not None
 
     import mcp.types as types
@@ -99,7 +99,7 @@ async def test_tool_call_audit_logging():
         recent_logs = CentralRepository.get_recent_audit_logs(db, limit=5)
         assert len(recent_logs) >= 1
         latest = recent_logs[0]
-        assert latest.instance_slug == "horst-suite"
+        assert latest.instance_slug == "exampleco-suite"
         assert latest.tool_name == "central__ping"
         assert latest.status == "success"
         assert latest.execution_time_ms >= 0

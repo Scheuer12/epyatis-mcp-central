@@ -1,5 +1,5 @@
 """
-Cliente upstream para servidores MCP remotos via SSE/HTTP (ex: Periskope).
+Cliente upstream para servidores MCP remotos via SSE/HTTP.
 """
 
 import asyncio
@@ -11,6 +11,7 @@ from mcp.client.session import ClientSession
 from mcp.client.sse import sse_client
 
 from central.models import UpstreamAuthConfig
+from central.security.ssrf import validate_safe_url
 from central.upstreams.base import BaseUpstream
 
 logger = logging.getLogger(__name__)
@@ -25,6 +26,7 @@ class RemoteSseUpstream(BaseUpstream):
         auth: UpstreamAuthConfig | None = None,
     ):
         super().__init__(connection_id, prefix)
+        validate_safe_url(url)
         self.url = url
         self.auth = auth
         self._cached_tools: list[types.Tool] = []
