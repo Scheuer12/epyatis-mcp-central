@@ -136,9 +136,9 @@ async def test_04_get_data_source_detailed_definition():
     assert source["authority"] == "official"
     assert source["status"] == "active"
     assert source["resource_type"] == "whatsapp_group"
-    assert source["native_resource_id"] == "120363429855948681@g.us"
+    assert source["native_resource_id"] == "120363000000000001@g.us"
     assert "periskope__periskope_send_message" in source["primary_tools"]
-    assert source["default_query_params"]["chat_id"] == "120363429855948681@g.us"
+    assert source["default_query_params"]["chat_id"] == "120363000000000001@g.us"
     assert "guidance" in source
     assert "version" in source
     assert "last_updated" in source

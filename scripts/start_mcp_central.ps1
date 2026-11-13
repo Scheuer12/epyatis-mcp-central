@@ -8,14 +8,12 @@ catch [Threading.AbandonedMutexException] { $ownsMutex = $true }
 if (-not $ownsMutex) { exit 0 }
 
 try {
-    $baseDir = "C:\Users\Scheuer\Documents\antigravity\adventurous-nobel"
-    if ($PSScriptRoot) {
-        $candidate = Split-Path -Parent $PSScriptRoot
-        if (Test-Path (Join-Path $candidate ".venv\Scripts\python.exe")) {
-            $baseDir = $candidate
-        }
-    }
+    $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
+    $baseDir = Split-Path -Parent $scriptDir
     $python = Join-Path $baseDir ".venv\Scripts\python.exe"
+    if (-not (Test-Path $python)) {
+        $python = "python"
+    }
     $logDir = Join-Path $baseDir "logs"
     if (-not (Test-Path $logDir)) {
         New-Item -ItemType Directory -Path $logDir -Force | Out-Null

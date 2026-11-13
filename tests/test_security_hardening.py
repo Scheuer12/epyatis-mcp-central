@@ -87,20 +87,20 @@ def test_sec02_prohibited_executables_blocked():
         validate_stdio_command("/bin/bash", ["-c", "id"])
 
 
-def test_sec02_shell_metacharacters_in_arguments_blocked():
+def test_sec02_shell_metacharacters_in_arguments_blocked(monkeypatch):
     """Metacaracteres de injeção de shell (;, |, &, `, $) devem ser bloqueados."""
+    monkeypatch.setattr(settings, "STDIO_ALLOWED_PACKAGES", ["@modelcontextprotocol/server-filesystem@0.6.2"])
     with pytest.raises(ValueError, match="proibidos por política de segurança"):
-        validate_stdio_command("npx", ["-y", "mcp-pkg; whoami"])
+        validate_stdio_command("npx", ["-y", "@modelcontextprotocol/server-filesystem@0.6.2", "dir; whoami"])
 
     with pytest.raises(ValueError, match="proibidos por política de segurança"):
-        validate_stdio_command("python", ["script.py", "|", "calc.exe"])
+        validate_stdio_command("npx", ["-y", "@modelcontextprotocol/server-filesystem@0.6.2", "|", "calc.exe"])
 
 
-def test_sec02_allowed_executables_accepted():
-    """Binários homologados (npx, node, python, uvx) com argumentos limpos devem ser aceitos."""
-    validate_stdio_command("npx", ["-y", "@modelcontextprotocol/server-filesystem", "C:\\temp"])
-    validate_stdio_command("python", ["my_mcp_server.py"])
-    validate_stdio_command("uvx", ["mcp-server-git"])
+def test_sec02_allowed_executables_accepted(monkeypatch):
+    """Binários homologados (npx) com argumentos limpos devem ser aceitos."""
+    monkeypatch.setattr(settings, "STDIO_ALLOWED_PACKAGES", ["@modelcontextprotocol/server-filesystem@0.6.2"])
+    validate_stdio_command("npx", ["-y", "@modelcontextprotocol/server-filesystem@0.6.2", "C:\\temp"])
 
 
 @pytest.mark.asyncio
@@ -130,7 +130,7 @@ def test_sec03_local_and_private_destinations_blocked():
     """Destinos de loopback, RFC1918 e metadados devem ser sumariamente bloqueados."""
     safe, reason = is_safe_external_url("http://127.0.0.1:8000/api/v1/connections")
     assert safe is False
-    assert "privado/local" in reason or "isolamento" in reason
+    assert "privado/local" in reason or "isolamento" in reason or "proibido" in reason
 
     safe_lh, reason_lh = is_safe_external_url("http://localhost:3100/admin")
     assert safe_lh is False

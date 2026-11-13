@@ -2,7 +2,7 @@ name: Security
 
 on:
   push:
-    branches: [main]
+    branches: [main, "fix/**", "security/**", "hardening/**"]
   pull_request:
     branches: [main]
   schedule:
@@ -13,7 +13,21 @@ permissions:
   contents: read
 
 jobs:
+  secret-scanning:
+    name: Secret scanning (Gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Gitleaks Secret Scanner
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   dependency-and-static-analysis:
+    name: Dependency and static analysis
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:

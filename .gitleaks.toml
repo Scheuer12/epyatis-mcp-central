@@ -1,0 +1,11 @@
+[allowlist]
+description = "Synthetic test secrets and CI placeholders"
+paths = [
+    '''tests/.*''',
+    '''\.github/workflows/.*''',
+]
+regexes = [
+    '''ci-test-.*''',
+    '''test-secret-.*''',
+    '''replace-with-.*''',
+]
