@@ -3,20 +3,36 @@ Test configuration and hermetic fixtures for Epyatis MCP Central test suite.
 Ensures tests run against an isolated temporary database with sanitized fixtures.
 """
 
+import json
 import os
 import sys
+import tempfile
 from pathlib import Path
+import pytest
+from sqlalchemy import create_engine
 
 # Ensure src is in sys.path for test discovery and CI runners
 SRC_DIR = Path(__file__).resolve().parent.parent / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-import json
-import tempfile
-import pytest
-from sqlalchemy import create_engine
+# Configure isolated temporary SQLite database for tests BEFORE importing any central modules
+_test_db = tempfile.NamedTemporaryFile(suffix="_test_central.db", delete=False)
+_test_db.close()
+_db_norm_path = _test_db.name.replace("\\", "/")
+_test_db_url = f"sqlite:///{_db_norm_path}"
 
+# Set environment variables prior to importing central config or session modules so defaults never hit real database
+os.environ["DATABASE_URL"] = _test_db_url
+os.environ["CENTRAL_ENV"] = "testing"
+os.environ["CENTRAL_SECRET_KEY"] = os.environ.get(
+    "CENTRAL_SECRET_KEY", "ci-test-secret-key-with-at-least-32-characters"
+)
+os.environ["CENTRAL_ADMIN_KEY"] = os.environ.get(
+    "CENTRAL_ADMIN_KEY", "ci-test-admin-key-with-at-least-32-characters"
+)
+
+import central.db.seeder as seeder_module
 import central.db.session as session_module
 from central.config import settings
 from central.db.entities import (
@@ -32,16 +48,11 @@ from central.db.session import get_db_context
 from central.gateway.manager import gateway_manager
 from central.security.tokens import hash_bearer_token
 
-# Configure isolated temporary SQLite database for tests
-_test_db = tempfile.NamedTemporaryFile(suffix="_test_central.db", delete=False)
-_test_db.close()
-_db_norm_path = _test_db.name.replace("\\", "/")
-_test_db_url = f"sqlite:///{_db_norm_path}"
-
-os.environ["DATABASE_URL"] = _test_db_url
+# Explicitly ensure settings and all module-level engines point to the isolated temporary test database
 settings.DATABASE_URL = _test_db_url
 session_module.engine = create_engine(_test_db_url, connect_args={"check_same_thread": False})
 session_module.SessionLocal.configure(bind=session_module.engine)
+seeder_module.engine = session_module.engine
 
 
 SANATIZED_EXAMPLECO_DATA_SOURCES = {
