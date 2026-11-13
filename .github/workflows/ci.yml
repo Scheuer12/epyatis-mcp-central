@@ -23,6 +23,7 @@ jobs:
       CENTRAL_ADMIN_KEY: ci-test-admin-key-with-at-least-32-characters
       DATABASE_URL: "sqlite:///:memory:"
       PERISKOPE_API_KEY: ""
+      PYTHONPATH: src
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

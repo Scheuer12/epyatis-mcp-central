@@ -3,8 +3,16 @@ Test configuration and hermetic fixtures for Epyatis MCP Central test suite.
 Ensures tests run against an isolated temporary database with sanitized fixtures.
 """
 
-import json
 import os
+import sys
+from pathlib import Path
+
+# Ensure src is in sys.path for test discovery and CI runners
+SRC_DIR = Path(__file__).resolve().parent.parent / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+
+import json
 import tempfile
 import pytest
 from sqlalchemy import create_engine
