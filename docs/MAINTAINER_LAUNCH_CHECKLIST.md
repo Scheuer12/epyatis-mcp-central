@@ -4,12 +4,12 @@ Use this checklist before broadly announcing the repository. It contains reposit
 
 ## Credential and history safety
 
-- [ ] Rotate the integration credential exposed during the local audit.
-- [ ] Rotate every historical/example admin or encryption secret that may have been used outside disposable development.
-- [ ] Run an approved secret scanner over the current tree and full Git history.
+- [x] Rotate the integration credential exposed during the local audit.
+- [x] Rotate every historical/example admin or encryption secret that may have been used outside disposable development.
+- [x] Run an approved secret scanner over the current tree and full Git history.
 - [ ] Inspect old CI logs, release artifacts, database files and backup folders separately.
-- [ ] Decide whether history rewriting is required and coordinate it before inviting contributors.
-- [ ] Confirm `.env`, OAuth files, databases, logs and `backups/` are not tracked.
+- [x] Decide whether history rewriting is required and coordinate it before inviting contributors.
+- [x] Confirm `.env`, OAuth files, databases, logs and `backups/` are not tracked.
 
 ## Repository state
 
@@ -24,8 +24,8 @@ Use this checklist before broadly announcing the repository. It contains reposit
 
 - [ ] Enable Issues.
 - [ ] Enable private vulnerability reporting and repository security advisories.
-- [ ] Protect `main` with required CI checks and at least one review when collaboration volume permits.
-- [ ] Prevent force pushes and branch deletion on `main`.
+- [x] Protect `main` with required CI checks and at least one review when collaboration volume permits.
+- [x] Prevent force pushes and branch deletion on `main`.
 - [ ] Enable Dependabot alerts/updates or document the chosen dependency-update process.
 - [ ] Create initial labels such as `good first issue`, `help wanted`, `documentation`, `security`, `testing`, `architecture` and `needs triage`.
 - [ ] Convert bounded roadmap work into issues with explicit acceptance criteria.

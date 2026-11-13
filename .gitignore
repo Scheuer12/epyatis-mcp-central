@@ -26,14 +26,47 @@ wheels/
 venv/
 ENV/
 
-# Environment and secrets
+# Environment and secrets (all variants)
 .env
+.env.*
+!.env.example
+*.env
+*.env.*
 *.local
-credentials.json
-tokens.json
+.env.local
+.env.*.local
+.env.development
+.env.staging
+.env.production
+.env.test
+
+# Credentials, tokens and secret JSON files
+credentials*.json
+tokens*.json
 client_secret*.json
 *.keys.json
-.*credentials.json
+.*credentials*.json
+*secret*.json
+secrets/
+
+# Keys, certificates and cryptographic material
+*.pem
+*.key
+*.pkcs12
+*.p12
+*.pfx
+*.crt
+*.cer
+*.der
+*.ca-bundle
+*.jks
+*.keystore
+id_rsa
+id_rsa*
+id_ecdsa
+id_ecdsa*
+id_ed25519
+id_ed25519*
 
 # Logs & Databases
 *.log
@@ -42,6 +75,10 @@ client_secret*.json
 *.db-shm
 *.db-wal
 backups/
+
+# Local maintenance/private scripts
+scripts/restart_paperclip.ps1
+scripts/update_epyatis_data_sources.py
 
 # IDEs
 .vscode/
@@ -57,3 +94,4 @@ htmlcov/
 junit.xml
 sbom*.json
 bandit*.json
+gitleaks*.json

@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 
-$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
 & (Join-Path $scriptDir "stop_mcp_central.ps1")
 
 Start-Sleep -Seconds 2

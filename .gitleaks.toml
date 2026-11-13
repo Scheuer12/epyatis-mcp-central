@@ -1,0 +1,10 @@
+[allowlist]
+description = "Synthetic test secrets and CI placeholders"
+regexes = [
+    '''ci-test-secret-key-with-at-least-32-characters''',
+    '''ci-test-admin-key-with-at-least-32-characters''',
+    '''test-secret-key-with-at-least-32-characters''',
+    '''ci-test-.*''',
+    '''test-secret-.*''',
+    '''replace-with-.*''',
+]

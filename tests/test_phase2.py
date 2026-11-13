@@ -123,7 +123,7 @@ async def test_create_connection_from_template_api():
                 "id": "fs-test-docs",
                 "name": "Documentos de Teste",
                 "prefix": "fstest",
-                "allowed_dir": "C:\\Users\\Scheuer\\Documents",
+                "allowed_dir": "C:\\shared\\test-docs",
             },
             "target_instance_slug": "exampleco-suite",
         }
@@ -138,7 +138,7 @@ async def test_create_connection_from_template_api():
             conn = CentralRepository.get_connection_by_id(db, "fs-test-docs")
             assert conn is not None
             assert conn.name == "Documentos de Teste"
-            assert "C:\\Users\\Scheuer\\Documents" in conn.args
+            assert "C:\\shared\\test-docs" in conn.args
 
 
 @pytest.mark.asyncio
