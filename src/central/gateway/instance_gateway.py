@@ -49,15 +49,34 @@ class InstanceGateway:
         )
 
         # Transport SSE protected against DNS rebinding and untrusted origins.
+        mcp_allowed_hosts: list[str] = []
+        for h in settings.ALLOWED_HOSTS:
+            mcp_allowed_hosts.append(h)
+            if not h.endswith(":*"):
+                mcp_allowed_hosts.append(f"{h}:*")
+
         security = TransportSecuritySettings(
             enable_dns_rebinding_protection=True,
-            allowed_hosts=settings.ALLOWED_HOSTS,
+            allowed_hosts=mcp_allowed_hosts,
             allowed_origins=settings.CORS_ALLOWED_ORIGINS,
         )
         self.sse_transport = SseServerTransport(
             endpoint=f"/mcp/{self.slug}/messages",
             security_settings=security,
         )
+
+        original_validate_host = self.sse_transport._security._validate_host
+
+        def patched_validate_host(host: str | None) -> bool:
+            if not host:
+                return False
+            clean_host = host.split(":")[0]
+            for pattern in settings.ALLOWED_HOSTS:
+                if pattern.startswith("*.") and clean_host.endswith(pattern[1:]):
+                    return True
+            return original_validate_host(host)
+
+        self.sse_transport._security._validate_host = patched_validate_host
 
     def _init_upstreams(self) -> None:
         for conn in self.config.connections:

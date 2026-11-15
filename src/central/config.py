@@ -39,13 +39,31 @@ class CentralSettings(BaseSettings):
     CENTRAL_ADMIN_KEY: str | None = Field(default=None, repr=False)
 
     # Exact, pinned npm package specs permitted for local MCP subprocesses.
-    STDIO_ALLOWED_PACKAGES: list[str] = []
+    STDIO_ALLOWED_PACKAGES: list[str] = [
+        "@us-all/google-drive-mcp@1.15.8",
+        "@periskope/whatsapp-mcp@0.2.0",
+    ]
 
     # Hosts permitidos (TrustedHostMiddleware) - Wildcard '*' removido do padrão seguro
-    ALLOWED_HOSTS: list[str] = ["localhost", "127.0.0.1", "test"]
+    ALLOWED_HOSTS: list[str] = [
+        "localhost",
+        "127.0.0.1",
+        "0.0.0.0",
+        "mcp.epyatis.com.br",
+        "mcpcentral.epyatis.com.br",
+        "ai.epyatis.com.br",
+        "*.epyatis.com.br",
+        "test",
+    ]
 
     # Origens permitidas para CORS
-    CORS_ALLOWED_ORIGINS: list[str] = ["http://localhost:8000", "http://127.0.0.1:8000"]
+    CORS_ALLOWED_ORIGINS: list[str] = [
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "https://mcpcentral.epyatis.com.br",
+        "https://mcp.epyatis.com.br",
+        "https://ai.epyatis.com.br",
+    ]
 
     # Variáveis de ambiente para upstream integrations
     PERISKOPE_API_KEY: str | None = Field(default=None, repr=False)
